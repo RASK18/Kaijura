@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Kaijura.App/Kaijura.App.csproj" />
+  <Project Path="Kaijura.Tests/Kaijura.Tests.csproj" />
+</Solution>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+  <title>Kaijura</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">Kaijura</div>
+      <nav class="nav">
+        <button class="nav-item" data-view="board">Tablero</button>
+        <button class="nav-item" data-view="archive">Archivo</button>
+        <button class="nav-item" data-view="missing">Ocultos</button>
+        <button class="nav-item" data-view="settings">Configuracion</button>
+      </nav>
+      <div class="sidebar-status">
+        <div id="connectionLabel" class="status-line">Sin configurar</div>
+        <div id="lastSync" class="status-note"></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="viewTitle">Tablero</h1>
+          <p id="statusMessage"></p>
+        </div>
+        <div class="topbar-actions">
+          <button id="refreshButton" class="button secondary" type="button">Refrescar</button>
+        </div>
+      </header>
+
+      <section id="updateBanner" class="update-banner hidden">
+        <span id="updateText"></span>
+        <button id="installUpdateButton" class="button compact" type="button">Instalar</button>
+      </section>
+
+      <section id="boardView" class="view">
+        <div class="lane" data-kind="task">
+          <div class="lane-title">Tareas</div>
+          <div id="taskBoard" class="kanban-grid"></div>
+        </div>
+
+        <div class="lane" data-kind="incident">
+          <div class="lane-title">Incidencias</div>
+          <div id="incidentBoard" class="kanban-grid"></div>
+        </div>
+
+        <section class="backlog">
+          <div class="backlog-header">Backlog</div>
+          <div class="backlog-grid">
+            <div>
+              <div class="list-title">Tareas</div>
+              <div id="taskBacklog" class="drop-list" data-section="backlog" data-kind="task" data-column="ToDo"></div>
+            </div>
+            <div>
+              <div class="list-title">Incidencias</div>
+              <div id="incidentBacklog" class="drop-list" data-section="backlog" data-kind="incident" data-column="ToDo"></div>
+            </div>
+          </div>
+          <div id="unmappedBlock" class="unmapped-block hidden">
+            <div class="list-title">Sin mapear</div>
+            <div id="unmappedList" class="plain-list"></div>
+          </div>
+        </section>
+      </section>
+
+      <section id="archiveView" class="view hidden">
+        <div class="section-title">Archivo</div>
+        <div id="archiveList" class="archive-list"></div>
+      </section>
+
+      <section id="missingView" class="view hidden">
+        <div class="section-title">Ocultos por JQL</div>
+        <div id="missingList" class="archive-list"></div>
+      </section>
+
+      <section id="settingsView" class="view hidden">
+        <form id="settingsForm" class="settings-form">
+          <div class="form-grid">
+            <label>
+              Host Jira
+              <input id="jiraHost" name="jiraHost" autocomplete="off" placeholder="https://jira.empresa.local">
+            </label>
+            <label>
+              Usuario
+              <input id="userName" name="userName" autocomplete="username">
+            </label>
+            <label>
+              Token personal
+              <input id="token" name="token" type="password" autocomplete="off">
+            </label>
+            <label>
+              Refresco automatico (min)
+              <input id="refreshMinutes" name="refreshMinutes" type="number" min="1" max="120">
+            </label>
+          </div>
+
+          <label>
+            JQL
+            <textarea id="jql" name="jql" rows="5"></textarea>
+          </label>
+
+          <div class="form-grid">
+            <label>
+              Issue types de tareas
+              <input id="taskIssueTypes" name="taskIssueTypes" placeholder="Task, Story, Tarea">
+            </label>
+            <label>
+              Issue types de incidencias
+              <input id="incidentIssueTypes" name="incidentIssueTypes" placeholder="Bug, Incident, Incidencia">
+            </label>
+            <label>
+              Maximo de tickets
+              <input id="maxIssues" name="maxIssues" type="number" min="1" max="5000">
+            </label>
+            <label>
+              GitHub Releases
+              <input id="updateRepositoryUrl" name="updateRepositoryUrl" autocomplete="off">
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="button primary" type="submit">Guardar y conectar</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
