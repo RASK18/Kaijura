@@ -99,6 +99,45 @@
             </Setter>
         </Style>
 
+        <Style x:Key="TitlebarStatusButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#313137" />
+            <Setter Property="Background" Value="#232329" />
+            <Setter Property="Foreground" Value="#f0f0f0" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Arrow" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="BorderBrush" Value="#43434a" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#313137" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="CloseChromeButtonStyle"
                TargetType="{x:Type Button}"
                BasedOn="{StaticResource ChromeButtonStyle}">
@@ -136,9 +175,10 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.ColumnSpan="3"
+            <TextBlock Grid.ColumnSpan="4"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        IsHitTestVisible="False"
@@ -173,13 +213,39 @@
                               AutomationProperties.Name="Ocultos" />
                 <ToggleButton x:Name="SettingsNavigationButton"
                               Style="{StaticResource TitlebarNavigationButtonStyle}"
-                              Content="Configuracion"
+                              Content="Ajustes"
                               Tag="settings"
                               Click="OnNavigationButtonClick"
-                              AutomationProperties.Name="Configuracion" />
+                              AutomationProperties.Name="Ajustes" />
             </StackPanel>
 
-            <StackPanel Grid.Column="2"
+            <StackPanel x:Name="TitlebarStatusPanel"
+                        Grid.Column="2"
+                        Margin="0,0,18,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Ellipse x:Name="TitlebarConnectionStatusDot"
+                         Width="9"
+                         Height="9"
+                         Margin="0,0,8,0"
+                         VerticalAlignment="Center"
+                         Fill="#73737b" />
+                <TextBlock x:Name="TitlebarStatusTextBlock"
+                           Margin="0,0,10,0"
+                           VerticalAlignment="Center"
+                           Foreground="#a7a7ad"
+                           FontFamily="Aptos, Bahnschrift"
+                           FontSize="13" />
+                <Button x:Name="TitlebarRefreshButton"
+                        Style="{StaticResource TitlebarStatusButtonStyle}"
+                        Content="&#xE72C;"
+                        Click="OnTitlebarRefreshButtonClick"
+                        AutomationProperties.Name="Refrescar"
+                        ToolTip="Refrescar" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="3"
                         Orientation="Horizontal"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
                 <Button Style="{StaticResource ChromeButtonStyle}"

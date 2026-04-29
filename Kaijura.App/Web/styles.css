@@ -41,7 +41,6 @@ button {
   min-height: 100vh;
 }
 
-.status-note,
 #statusMessage {
   margin: 0;
   color: var(--muted);
@@ -50,73 +49,12 @@ button {
 
 .main {
   min-width: 0;
-  padding: 22px 24px 32px;
+  padding: 8px 24px 32px;
 }
 
 .topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 44px;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-soft);
-}
-
-.topbar-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
-  font-weight: 700;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-}
-
-.topbar-sync {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--quiet);
-}
-
-.status-dot.connected {
-  background: var(--primary);
-}
-
-.status-dot.refreshing {
-  background: var(--warning);
-}
-
-.status-dot.blocked {
-  background: var(--danger);
-}
-
-#statusMessage:empty,
-#lastSync:empty {
-  display: none;
-}
-
-#statusMessage:not(:empty) {
-  margin-top: 6px;
 }
 
 .button {
@@ -148,15 +86,6 @@ h1 {
   padding: 0 10px;
 }
 
-.button.icon-button {
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
-  font-family: "Segoe MDL2 Assets";
-  font-size: 14px;
-  line-height: 1;
-}
-
 .button:disabled {
   cursor: default;
   opacity: 0.55;
@@ -176,7 +105,7 @@ h1 {
 }
 
 .view {
-  padding-top: 20px;
+  padding-top: 8px;
 }
 
 .hidden {
@@ -407,8 +336,7 @@ textarea:focus {
   border-color: var(--primary);
 }
 
-.button:focus-visible,
-.topbar-actions .button:focus-visible {
+.button:focus-visible {
   outline: 1px solid var(--primary);
   outline-offset: 2px;
 }

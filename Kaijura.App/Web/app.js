@@ -14,13 +14,6 @@ const views = {
   settings: document.getElementById("settingsView")
 };
 
-const titles = {
-  board: "Tablero",
-  archive: "Archivo",
-  missing: "Ocultos",
-  settings: "Configuracion"
-};
-
 window.chrome.webview.addEventListener("message", event => {
   if (!event.data || event.data.type !== "state") {
     return;
@@ -32,12 +25,10 @@ window.chrome.webview.addEventListener("message", event => {
 
 window.addEventListener("DOMContentLoaded", () => {
   bindChrome();
-  window.setInterval(renderLastSync, 30000);
   post("ready");
 });
 
 function bindChrome() {
-  document.getElementById("refreshButton").addEventListener("click", () => post("refresh"));
   document.getElementById("installUpdateButton").addEventListener("click", () => post("installUpdate"));
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
@@ -56,14 +47,11 @@ function render() {
 function renderChrome() {
   const activeView = state.activeView || "settings";
   const isRefreshing = state.connection.status === "refreshing";
+  const statusMessage = isRefreshing ? "" : state.connection.message || "";
   Object.entries(views).forEach(([name, element]) => element.classList.toggle("hidden", name !== activeView));
 
-  document.getElementById("viewTitle").textContent = titles[activeView] || "Kaijura";
-  document.getElementById("statusMessage").textContent = isRefreshing ? "" : state.connection.message || "";
-  document.getElementById("refreshButton").disabled = state.connection.isRefreshing || !state.connection.isConfigured;
-
-  renderConnectionStatus();
-  renderLastSync();
+  document.querySelector(".topbar").classList.toggle("hidden", !statusMessage);
+  document.getElementById("statusMessage").textContent = statusMessage;
 
   const banner = document.getElementById("updateBanner");
   const installButton = document.getElementById("installUpdateButton");
@@ -71,31 +59,6 @@ function renderChrome() {
   banner.classList.toggle("hidden", !showUpdate);
   document.getElementById("updateText").textContent = updateText(state.update);
   installButton.classList.toggle("hidden", !state.update.canInstall);
-}
-
-function renderConnectionStatus() {
-  const status = state.connection.status || "unconfigured";
-  const connectionStatus = document.getElementById("connectionStatus");
-  const label = connectionText(status);
-
-  connectionStatus.className = `status-dot ${status}`;
-  connectionStatus.title = label;
-  connectionStatus.setAttribute("aria-label", label);
-}
-
-function renderLastSync() {
-  const lastSync = document.getElementById("lastSync");
-  const isRefreshing = state.connection.status === "refreshing";
-  const hasLastSync = Boolean(state.lastSuccessfulSyncAt);
-
-  if (isRefreshing) {
-    lastSync.textContent = "Sincronizando con Jira...";
-    lastSync.parentElement.classList.remove("hidden");
-    return;
-  }
-
-  lastSync.textContent = hasLastSync ? `Actualizado: ${formatRelativeTime(state.lastSuccessfulSyncAt)}` : "";
-  lastSync.parentElement.classList.toggle("hidden", !hasLastSync);
 }
 
 function renderSettings() {
@@ -375,30 +338,6 @@ function unreadTitle(issue) {
   const author = issue.lastRelevantCommentAuthor ? ` de ${issue.lastRelevantCommentAuthor}` : "";
   const date = issue.lastRelevantCommentAt ? ` (${formatDate(issue.lastRelevantCommentAt)})` : "";
   return `Comentario sin leer${author}${date}. Marcar como leido`;
-}
-
-function formatRelativeTime(value) {
-  const date = new Date(value);
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-
-  if (elapsedSeconds < 60) {
-    return "hace unos segundos";
-  }
-
-  const units = [
-    { seconds: 60, singular: "minuto", plural: "minutos" },
-    { seconds: 3600, singular: "hora", plural: "horas" },
-    { seconds: 86400, singular: "dia", plural: "dias" }
-  ];
-
-  for (const unit of units) {
-    const valueInUnit = Math.floor(elapsedSeconds / unit.seconds);
-    const nextUnit = units[units.indexOf(unit) + 1];
-
-    if (!nextUnit || elapsedSeconds < nextUnit.seconds) {
-      return `hace ${valueInUnit} ${valueInUnit === 1 ? unit.singular : unit.plural}`;
-    }
-  }
 }
 
 function formatDate(value) {

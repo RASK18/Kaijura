@@ -11,19 +11,7 @@
   <div class="app-shell">
     <main class="main">
       <header class="topbar">
-        <div>
-          <div class="topbar-title-row">
-            <h1 id="viewTitle">Tablero</h1>
-          </div>
-          <p id="statusMessage"></p>
-        </div>
-        <div class="topbar-actions">
-          <div class="topbar-sync">
-            <span id="connectionStatus" class="status-dot" role="img" aria-label="Sin configurar"></span>
-            <span id="lastSync" class="status-note"></span>
-          </div>
-          <button id="refreshButton" class="button secondary icon-button" type="button" aria-label="Refrescar" title="Refrescar">&#xE72C;</button>
-        </div>
+        <p id="statusMessage"></p>
       </header>
 
       <section id="updateBanner" class="update-banner hidden">
@@ -62,12 +50,12 @@
       </section>
 
       <section id="archiveView" class="view hidden">
-        <div class="section-title">Archivo</div>
+        <div class="section-title">Tickets archivados</div>
         <div id="archiveList" class="archive-list"></div>
       </section>
 
       <section id="missingView" class="view hidden">
-        <div class="section-title">Ocultos por JQL</div>
+        <div class="section-title">Tickets perdidos que ya no devuelve JQL</div>
         <div id="missingList" class="archive-list"></div>
       </section>
 

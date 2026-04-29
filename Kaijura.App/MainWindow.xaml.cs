@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Kaijura.App.Models;
 using Kaijura.App.Services;
@@ -18,6 +19,11 @@ namespace Kaijura.App;
 public partial class MainWindow : Window
 {
     private const string AppHost = "app.kaijura.local";
+
+    private static readonly Brush ConnectedBrush = CreateBrush("#00d4aa");
+    private static readonly Brush WarningBrush = CreateBrush("#ffb85c");
+    private static readonly Brush DangerBrush = CreateBrush("#ff6b7a");
+    private static readonly Brush QuietBrush = CreateBrush("#73737b");
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -31,6 +37,7 @@ public partial class MainWindow : Window
     private readonly CommentSyncService _commentSyncService = new();
     private readonly UpdateService _updateService = new();
     private readonly DispatcherTimer _refreshTimer = new();
+    private readonly DispatcherTimer _relativeTimeTimer = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
 
@@ -46,10 +53,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         StateChanged += OnWindowStateChanged;
         Loaded += OnLoaded;
-        Closed += (_, _) => _shutdown.Cancel();
+        Closed += (_, _) =>
+        {
+            _shutdown.Cancel();
+            _relativeTimeTimer.Stop();
+        };
         _refreshTimer.Tick += async (_, _) => await RefreshJiraAsync(isAutoRefresh: true);
+        _relativeTimeTimer.Interval = TimeSpan.FromSeconds(30);
+        _relativeTimeTimer.Tick += (_, _) => UpdateTitlebarStatus();
+        _relativeTimeTimer.Start();
         UpdateMaximizeButtonState();
         UpdateNavigationButtonState();
+        UpdateTitlebarStatus();
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
@@ -84,6 +99,11 @@ public partial class MainWindow : Window
         {
             SetActiveView(view);
         }
+    }
+
+    private async void OnTitlebarRefreshButtonClick(object sender, RoutedEventArgs e)
+    {
+        await RefreshJiraAsync(isAutoRefresh: false);
     }
 
     private void UpdateMaximizeButtonState()
@@ -128,12 +148,46 @@ public partial class MainWindow : Window
         }
     }
 
+    private void UpdateTitlebarStatus()
+    {
+        var status = _connection.Status ?? "unconfigured";
+        var isRefreshing = status == "refreshing";
+        var hasLastSync = _state.LastSuccessfulSyncAt is not null;
+
+        TitlebarConnectionStatusDot.Fill = status switch
+        {
+            "connected" => ConnectedBrush,
+            "refreshing" => WarningBrush,
+            "blocked" => DangerBrush,
+            _ => QuietBrush
+        };
+
+        var statusText = isRefreshing
+            ? "Sincronizando con Jira..."
+            : status == "blocked"
+                ? "Error"
+            : hasLastSync
+                ? $"Actualizado: {FormatRelativeTime(_state.LastSuccessfulSyncAt!.Value)}"
+                : string.Empty;
+
+        TitlebarStatusTextBlock.Text = statusText;
+        TitlebarStatusTextBlock.Visibility = string.IsNullOrWhiteSpace(statusText)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        TitlebarRefreshButton.IsEnabled = !_connection.IsRefreshing && _connection.IsConfigured;
+
+        var connectionLabel = ConnectionText(status);
+        TitlebarConnectionStatusDot.ToolTip = connectionLabel;
+        AutomationProperties.SetName(TitlebarConnectionStatusDot, connectionLabel);
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
         _state = await _store.LoadAsync(_shutdown.Token);
         _connection = CreateInitialConnection();
         ConfigureRefreshTimer();
+        UpdateTitlebarStatus();
 
         await InitializeWebViewAsync();
         _ = CheckForUpdatesAsync();
@@ -460,6 +514,7 @@ public partial class MainWindow : Window
     private void SendState()
     {
         UpdateNavigationButtonState();
+        UpdateTitlebarStatus();
 
         if (!_webReady || Browser.CoreWebView2 is null)
         {
@@ -546,6 +601,54 @@ public partial class MainWindow : Window
         }
 
         return string.Join(" ", messages);
+    }
+
+    private static string ConnectionText(string status)
+    {
+        return status switch
+        {
+            "connected" => "Conectado",
+            "refreshing" => "Sincronizando",
+            "blocked" => "Bloqueado",
+            "idle" => "Preparado",
+            _ => "Sin configurar"
+        };
+    }
+
+    private static string FormatRelativeTime(DateTimeOffset value)
+    {
+        var elapsed = DateTimeOffset.Now - value;
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        if (elapsed.TotalSeconds < 60)
+        {
+            return "hace unos segundos";
+        }
+
+        if (elapsed.TotalMinutes < 60)
+        {
+            var minutes = Math.Max(1, (int)elapsed.TotalMinutes);
+            return $"hace {minutes} {(minutes == 1 ? "minuto" : "minutos")}";
+        }
+
+        if (elapsed.TotalHours < 24)
+        {
+            var hours = Math.Max(1, (int)elapsed.TotalHours);
+            return $"hace {hours} {(hours == 1 ? "hora" : "horas")}";
+        }
+
+        var days = Math.Max(1, (int)elapsed.TotalDays);
+        return $"hace {days} {(days == 1 ? "dia" : "dias")}";
+    }
+
+    private static Brush CreateBrush(string color)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)!);
+        brush.Freeze();
+        return brush;
     }
 
     private static string FriendlyJiraError(Exception ex)
