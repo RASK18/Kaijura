@@ -119,12 +119,24 @@ function renderSettings() {
 }
 
 function renderBoard() {
-  renderLane("task", document.getElementById("taskBoard"));
-  renderLane("incident", document.getElementById("incidentBoard"));
-  renderList(document.getElementById("taskBacklog"), filterIssues("backlog", "task"), true);
-  renderList(document.getElementById("incidentBacklog"), filterIssues("backlog", "incident"), true);
+  const taskBoardIssues = filterIssues("board", "task");
+  const incidentBoardIssues = filterIssues("board", "incident");
+  const taskBacklogIssues = filterIssues("backlog", "task");
+  const incidentBacklogIssues = filterIssues("backlog", "incident");
 
   const unmapped = state.issues.filter(issue => issue.kind === "unmapped" && !issue.isMissing && issue.section !== "archived");
+
+  setCount("taskBoardCount", taskBoardIssues.length);
+  setCount("incidentBoardCount", incidentBoardIssues.length);
+  setCount("taskBacklogCount", taskBacklogIssues.length);
+  setCount("incidentBacklogCount", incidentBacklogIssues.length);
+  setCount("unmappedCount", unmapped.length);
+
+  renderLane("task", document.getElementById("taskBoard"));
+  renderLane("incident", document.getElementById("incidentBoard"));
+  renderList(document.getElementById("taskBacklog"), taskBacklogIssues, true);
+  renderList(document.getElementById("incidentBacklog"), incidentBacklogIssues, true);
+
   const block = document.getElementById("unmappedBlock");
   block.classList.toggle("hidden", unmapped.length === 0);
   renderList(document.getElementById("unmappedList"), unmapped, false);
@@ -211,11 +223,6 @@ function createCard(issue, draggable, action) {
     <div class="issue-title">${escapeHtml(issue.summary || "")}</div>
   `;
 
-  const topActions = card.querySelector(".card-top-actions");
-  if (issue.section === "board" && issue.column === "Progress") {
-    topActions.insertBefore(createTrackerButton(issue), topActions.firstChild);
-  }
-
   if (issue.hasUnreadComment) {
     const unreadButton = document.createElement("button");
     unreadButton.className = "comment-alert";
@@ -239,12 +246,19 @@ function createCard(issue, draggable, action) {
     toggleTransitionMenu(issue.id);
   });
 
-  if (isTrackerActive(issue)) {
+  if (issue.section === "board" && issue.column === "Progress") {
     const trackerRow = document.createElement("div");
     trackerRow.className = "tracker-row";
-    trackerRow.innerHTML = `
-      <span class="tracker-elapsed" data-tracker-started-at="${escapeHtml(state.activeTracker.startedAt)}">${formatElapsed(state.activeTracker.startedAt)}</span>
-    `;
+    trackerRow.appendChild(createTrackerButton(issue));
+
+    if (isTrackerActive(issue)) {
+      const elapsed = document.createElement("span");
+      elapsed.className = "tracker-elapsed";
+      elapsed.dataset.trackerStartedAt = state.activeTracker.startedAt;
+      elapsed.textContent = formatElapsed(state.activeTracker.startedAt);
+      trackerRow.appendChild(elapsed);
+    }
+
     card.appendChild(trackerRow);
   }
 
@@ -761,6 +775,13 @@ function setValue(id, value) {
   const input = document.getElementById(id);
   if (document.activeElement !== input) {
     input.value = value;
+  }
+}
+
+function setCount(id, value) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.textContent = String(value);
   }
 }
 

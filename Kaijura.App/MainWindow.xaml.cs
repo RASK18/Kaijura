@@ -994,11 +994,6 @@ public partial class MainWindow : Window
     {
         List<string> messages = [];
 
-        if (summary.UnmappedCount > 0)
-        {
-            messages.Add($"{summary.UnmappedCount} sin mapear.");
-        }
-
         if (summary.Truncated)
         {
             messages.Add("JQL truncada por limite configurado.");

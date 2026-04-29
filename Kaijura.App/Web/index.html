@@ -21,29 +21,43 @@
 
       <section id="boardView" class="view">
         <div class="lane" data-kind="task">
-          <div class="lane-title">Tareas</div>
+          <div class="lane-title section-header">
+            <span>Kanban Tareas</span>
+            <span id="taskBoardCount" class="section-count">0</span>
+          </div>
           <div id="taskBoard" class="kanban-grid"></div>
         </div>
 
         <div class="lane" data-kind="incident">
-          <div class="lane-title">Incidencias</div>
+          <div class="lane-title section-header">
+            <span>Kanban Incidencias</span>
+            <span id="incidentBoardCount" class="section-count">0</span>
+          </div>
           <div id="incidentBoard" class="kanban-grid"></div>
         </div>
 
         <section class="backlog">
-          <div class="backlog-header">Backlog</div>
           <div class="backlog-grid">
             <div>
-              <div class="list-title">Tareas</div>
+              <div class="list-title section-header">
+                <span>Backlog Tareas</span>
+                <span id="taskBacklogCount" class="section-count">0</span>
+              </div>
               <div id="taskBacklog" class="drop-list" data-section="backlog" data-kind="task" data-column="ToDo"></div>
             </div>
             <div>
-              <div class="list-title">Incidencias</div>
+              <div class="list-title section-header">
+                <span>Backlog Incidencias</span>
+                <span id="incidentBacklogCount" class="section-count">0</span>
+              </div>
               <div id="incidentBacklog" class="drop-list" data-section="backlog" data-kind="incident" data-column="ToDo"></div>
             </div>
           </div>
           <div id="unmappedBlock" class="unmapped-block hidden">
-            <div class="list-title">Sin mapear</div>
+            <div class="list-title section-header">
+              <span>Sin mapear</span>
+              <span id="unmappedCount" class="section-count">0</span>
+            </div>
             <div id="unmappedList" class="plain-list"></div>
           </div>
         </section>
