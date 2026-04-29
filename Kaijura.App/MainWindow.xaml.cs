@@ -215,9 +215,14 @@ public partial class MainWindow : Window
     {
         Loaded -= OnLoaded;
         _state = await _store.LoadAsync(_shutdown.Token);
+        var seededIgnoredCommentAuthor = _state.Config.SeedIgnoredCommentAuthorsWithUserName();
         _connection = CreateInitialConnection();
         ConfigureRefreshTimer();
         UpdateTitlebarStatus();
+        if (seededIgnoredCommentAuthor)
+        {
+            await _store.SaveAsync(_state, _shutdown.Token);
+        }
 
         await InitializeWebViewAsync();
         _ = CheckForUpdatesAsync();
@@ -371,6 +376,7 @@ public partial class MainWindow : Window
         _state.Config.TaskIssueTypes = CleanList(settings.TaskIssueTypes ?? []);
         _state.Config.IncidentIssueTypes = CleanList(settings.IncidentIssueTypes ?? []);
         _state.Config.IgnoredCommentAuthors = CleanList(settings.IgnoredCommentAuthors ?? []);
+        _state.Config.SeedIgnoredCommentAuthorsWithUserName();
         _state.Config.RefreshMinutes = Math.Clamp(settings.RefreshMinutes, 1, 120);
         _state.Config.MaxIssues = Math.Clamp(settings.MaxIssues, 1, 5000);
         _state.Config.UpdateRepositoryUrl = settings.UpdateRepositoryUrl.Trim();

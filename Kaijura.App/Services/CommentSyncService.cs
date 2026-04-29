@@ -111,7 +111,6 @@ public sealed class CommentSyncService
     private static IReadOnlyCollection<string> BuildIgnoredAuthors(AppConfig config)
     {
         return config.IgnoredCommentAuthors
-            .Append(config.UserName)
             .Select(author => author.Trim())
             .Where(author => !string.IsNullOrWhiteSpace(author))
             .Distinct(StringComparer.OrdinalIgnoreCase)

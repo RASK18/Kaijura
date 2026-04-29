@@ -62,7 +62,7 @@ public sealed class CommentSyncServiceTests
     }
 
     [Fact]
-    public async Task ConfiguredUserAndIgnoredAuthorsDoNotCreateUnreadNotice()
+    public async Task IgnoredAuthorsDoNotCreateUnreadNotice()
     {
         var state = CreateState();
         state.Config.IgnoredCommentAuthors = ["ci-bot"];
@@ -81,8 +81,32 @@ public sealed class CommentSyncServiceTests
         Assert.False(issue.HasUnreadComment);
         Assert.True(issue.CommentBaselineEstablished);
         Assert.Empty(issue.LastRelevantCommentId);
-        Assert.Contains("rafa", reader.LastIgnoredAuthors, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("ci-bot", reader.LastIgnoredAuthors, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("rafa", reader.LastIgnoredAuthors, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ConfiguredUserIsNotIgnoredUnlessListed()
+    {
+        var state = CreateState();
+        var issue = AddBoardIssue(state);
+        issue.CommentBaselineEstablished = true;
+        issue.LastRelevantCommentId = "50000";
+        issue.LastReadCommentId = "50000";
+        var reader = new IgnoringFakeCommentReader(new JiraComment(
+            "50001",
+            "rafa",
+            "rafa-key",
+            "Rafa",
+            "rafa@example.local",
+            DateTimeOffset.Parse("2026-04-28T10:00:00Z"),
+            DateTimeOffset.Parse("2026-04-28T10:00:00Z")));
+
+        await new CommentSyncService().SyncKanbanCommentsAsync(state, reader, "token", CancellationToken.None);
+
+        Assert.True(issue.HasUnreadComment);
+        Assert.Equal("50001", issue.LastRelevantCommentId);
+        Assert.DoesNotContain("rafa", reader.LastIgnoredAuthors, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -247,6 +247,7 @@ function createCard(issue, draggable, action) {
   card.dataset.issueId = issue.id;
   card.draggable = draggable && issue.kind !== "unmapped";
   card.classList.toggle("tracker-active", isTrackerActive(issue));
+  card.classList.toggle("has-unread-comment", issue.hasUnreadComment);
 
   card.innerHTML = `
     <div class="card-top">
