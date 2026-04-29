@@ -41,19 +41,6 @@ button {
   min-height: 100vh;
 }
 
-.status-line {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.status-line.connected {
-  color: var(--primary);
-}
-
-.status-line.blocked {
-  color: var(--danger);
-}
-
 .status-note,
 #statusMessage {
   margin: 0;
@@ -71,8 +58,8 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  min-height: 58px;
-  padding-bottom: 18px;
+  min-height: 44px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -80,7 +67,6 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 6px;
 }
 
 h1 {
@@ -92,7 +78,45 @@ h1 {
 
 .topbar-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+  min-height: 34px;
+}
+
+.topbar-sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--quiet);
+}
+
+.status-dot.connected {
+  background: var(--primary);
+}
+
+.status-dot.refreshing {
+  background: var(--warning);
+}
+
+.status-dot.blocked {
+  background: var(--danger);
+}
+
+#statusMessage:empty,
+#lastSync:empty {
+  display: none;
+}
+
+#statusMessage:not(:empty) {
+  margin-top: 6px;
 }
 
 .button {
@@ -122,6 +146,15 @@ h1 {
 .button.compact {
   min-height: 28px;
   padding: 0 10px;
+}
+
+.button.icon-button {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  font-family: "Segoe MDL2 Assets";
+  font-size: 14px;
+  line-height: 1;
 }
 
 .button:disabled {

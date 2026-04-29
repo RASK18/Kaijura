@@ -310,7 +310,7 @@ public partial class MainWindow : Window
         {
             _connection.IsRefreshing = true;
             _connection.Status = "refreshing";
-            _connection.Message = isAutoRefresh ? "Actualizando desde Jira." : "Sincronizando Jira.";
+            _connection.Message = "Sincronizando con Jira...";
             SendState();
 
             var token = _secretProtector.Unprotect(_state.Config.EncryptedToken);
@@ -528,24 +528,24 @@ public partial class MainWindow : Window
 
     private static string BuildSyncMessage(SyncSummary summary, CommentSyncSummary commentSummary)
     {
-        var message = $"{summary.VisibleCount} visibles, {summary.MissingCount} ocultos por JQL.";
+        List<string> messages = [];
 
         if (summary.UnmappedCount > 0)
         {
-            message += $" {summary.UnmappedCount} sin mapear.";
+            messages.Add($"{summary.UnmappedCount} sin mapear.");
         }
 
         if (summary.Truncated)
         {
-            message += " JQL truncada por límite configurado.";
+            messages.Add("JQL truncada por limite configurado.");
         }
 
         if (commentSummary.FailedCount > 0)
         {
-            message += $" {commentSummary.FailedCount} tickets sin comprobar comentarios.";
+            messages.Add($"{commentSummary.FailedCount} tickets sin comprobar comentarios.");
         }
 
-        return message;
+        return string.Join(" ", messages);
     }
 
     private static string FriendlyJiraError(Exception ex)
