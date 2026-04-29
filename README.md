@@ -1,5 +1,9 @@
 # Kaijura
 
+<p align="center">
+  <img src="Kaijura.App/Assets/Logo.png" alt="Kaijura logo" width="140">
+</p>
+
 Kaijura is a Windows 11 desktop app for reading Jira Server/Data Center issues and managing a local kanban view without changing Jira.
 
 ## Stack

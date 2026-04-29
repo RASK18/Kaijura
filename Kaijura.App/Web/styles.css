@@ -276,19 +276,34 @@ button {
 }
 
 .comment-alert {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 11px;
-  height: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--warning);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.comment-alert-dot {
+  width: 10px;
+  height: 10px;
   border: 1px solid #ffc66d;
   border-radius: 50%;
   background: var(--warning);
-  cursor: pointer;
 }
 
 .comment-alert:hover {
+  color: #ffd08d;
+}
+
+.comment-alert:hover .comment-alert-dot {
   border-color: #ffe1a6;
 }
 
@@ -298,10 +313,6 @@ button {
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-}
-
-.card.has-unread-comment .card-top {
-  padding-right: 18px;
 }
 
 .card-top-actions {
@@ -345,6 +356,7 @@ button {
 
 .issue-status:focus-visible,
 .tracker-button:focus-visible,
+.comment-alert:focus-visible,
 .confirm-button:focus-visible,
 .status-option:focus-visible,
 .status-form-submit:focus-visible,
@@ -405,6 +417,28 @@ button {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 26px;
+}
+
+.card-footer-start,
+.card-footer-end {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-footer-end {
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .tracker-row {
@@ -570,16 +604,21 @@ button {
 
 .backlog-grid,
 .archive-grid,
-.missing-grid {
+.missing-grid,
+.unmapped-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 14px;
 }
 
+.unmapped-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
 .backlog-grid > div,
 .archive-grid > div,
 .missing-grid > div,
-.unmapped-block {
+.unmapped-grid > div {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: #151518;
@@ -597,10 +636,6 @@ button {
   font-weight: 700;
 }
 
-.unmapped-block {
-  margin-top: 14px;
-}
-
 .plain-list {
   display: grid;
   gap: 8px;
@@ -608,7 +643,8 @@ button {
 }
 
 .archive-grid .plain-list,
-.missing-grid .plain-list {
+.missing-grid .plain-list,
+.unmapped-grid .plain-list {
   align-content: start;
   min-height: 160px;
 }

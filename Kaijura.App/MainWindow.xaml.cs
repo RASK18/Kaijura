@@ -159,7 +159,7 @@ public partial class MainWindow : Window
 
     private static bool IsKnownView(string view)
     {
-        return view is "board" or "archive" or "missing" or "settings";
+        return view is "board" or "archive" or "missing" or "unmapped" or "settings";
     }
 
     private void UpdateNavigationButtonState()
@@ -169,6 +169,7 @@ public partial class MainWindow : Window
             BoardNavigationButton,
             ArchiveNavigationButton,
             MissingNavigationButton,
+            UnmappedNavigationButton,
             SettingsNavigationButton
         ];
 

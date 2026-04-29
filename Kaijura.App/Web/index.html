@@ -53,13 +53,6 @@
               <div id="incidentBacklog" class="drop-list" data-section="backlog" data-kind="incident" data-column="ToDo"></div>
             </div>
           </div>
-          <div id="unmappedBlock" class="unmapped-block hidden">
-            <div class="list-title section-header">
-              <span>Sin mapear</span>
-              <span id="unmappedCount" class="section-count">0</span>
-            </div>
-            <div id="unmappedList" class="plain-list"></div>
-          </div>
         </section>
       </section>
 
@@ -75,10 +68,6 @@
             <div id="incidentArchiveList" class="plain-list"></div>
           </div>
         </div>
-        <div id="archiveUnmappedBlock" class="unmapped-block hidden">
-          <div class="list-title">Sin mapear</div>
-          <div id="archiveUnmappedList" class="plain-list"></div>
-        </div>
       </section>
 
       <section id="missingView" class="view hidden">
@@ -93,9 +82,32 @@
             <div id="incidentMissingList" class="plain-list"></div>
           </div>
         </div>
-        <div id="missingUnmappedBlock" class="unmapped-block hidden">
-          <div class="list-title">Sin mapear</div>
-          <div id="missingUnmappedList" class="plain-list"></div>
+      </section>
+
+      <section id="unmappedView" class="view hidden">
+        <div class="section-title">Tickets sin mapear</div>
+        <div class="unmapped-grid">
+          <div>
+            <div class="list-title section-header">
+              <span>Activos</span>
+              <span id="activeUnmappedCount" class="section-count">0</span>
+            </div>
+            <div id="activeUnmappedList" class="plain-list"></div>
+          </div>
+          <div>
+            <div class="list-title section-header">
+              <span>Archivados</span>
+              <span id="archivedUnmappedCount" class="section-count">0</span>
+            </div>
+            <div id="archivedUnmappedList" class="plain-list"></div>
+          </div>
+          <div>
+            <div class="list-title section-header">
+              <span>Ocultos</span>
+              <span id="missingUnmappedCount" class="section-count">0</span>
+            </div>
+            <div id="unmappedMissingList" class="plain-list"></div>
+          </div>
         </div>
       </section>
 

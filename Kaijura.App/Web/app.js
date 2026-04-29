@@ -35,6 +35,7 @@ const views = {
   board: document.getElementById("boardView"),
   archive: document.getElementById("archiveView"),
   missing: document.getElementById("missingView"),
+  unmapped: document.getElementById("unmappedView"),
   settings: document.getElementById("settingsView")
 };
 
@@ -119,6 +120,7 @@ function render() {
   renderBoard();
   renderArchive();
   renderMissing();
+  renderUnmapped();
 }
 
 function renderChrome() {
@@ -159,22 +161,15 @@ function renderBoard() {
   const taskBacklogIssues = filterIssues("backlog", "task");
   const incidentBacklogIssues = filterIssues("backlog", "incident");
 
-  const unmapped = state.issues.filter(issue => issue.kind === "unmapped" && !issue.isMissing && issue.section !== "archived");
-
   setCount("taskBoardCount", taskBoardIssues.length);
   setCount("incidentBoardCount", incidentBoardIssues.length);
   setCount("taskBacklogCount", taskBacklogIssues.length);
   setCount("incidentBacklogCount", incidentBacklogIssues.length);
-  setCount("unmappedCount", unmapped.length);
 
   renderLane("task", document.getElementById("taskBoard"));
   renderLane("incident", document.getElementById("incidentBoard"));
   renderList(document.getElementById("taskBacklog"), taskBacklogIssues, true);
   renderList(document.getElementById("incidentBacklog"), incidentBacklogIssues, true);
-
-  const block = document.getElementById("unmappedBlock");
-  block.classList.toggle("hidden", unmapped.length === 0);
-  renderList(document.getElementById("unmappedList"), unmapped, false);
 }
 
 function renderLane(kind, host) {
@@ -200,24 +195,31 @@ function renderLane(kind, host) {
 
 function renderArchive() {
   const archived = state.issues.filter(issue => issue.section === "archived");
-  const unmapped = archived.filter(issue => issue.kind === "unmapped");
-  const unmappedBlock = document.getElementById("archiveUnmappedBlock");
 
   renderList(document.getElementById("taskArchiveList"), archived.filter(issue => issue.kind === "task"), false, "restore");
   renderList(document.getElementById("incidentArchiveList"), archived.filter(issue => issue.kind === "incident"), false, "restore");
-  unmappedBlock.classList.toggle("hidden", unmapped.length === 0);
-  renderList(document.getElementById("archiveUnmappedList"), unmapped, false, "restore");
 }
 
 function renderMissing() {
   const missing = state.issues.filter(issue => issue.section === "missing" || issue.isMissing);
-  const unmapped = missing.filter(issue => issue.kind === "unmapped");
-  const unmappedBlock = document.getElementById("missingUnmappedBlock");
 
   renderList(document.getElementById("taskMissingList"), missing.filter(issue => issue.kind === "task"), false);
   renderList(document.getElementById("incidentMissingList"), missing.filter(issue => issue.kind === "incident"), false);
-  unmappedBlock.classList.toggle("hidden", unmapped.length === 0);
-  renderList(document.getElementById("missingUnmappedList"), unmapped, false);
+}
+
+function renderUnmapped() {
+  const unmapped = state.issues.filter(issue => issue.kind === "unmapped");
+  const missing = unmapped.filter(issue => issue.section === "missing" || issue.isMissing);
+  const archived = unmapped.filter(issue => !issue.isMissing && issue.section === "archived");
+  const active = unmapped.filter(issue => !issue.isMissing && issue.section !== "archived" && issue.section !== "missing");
+
+  setCount("activeUnmappedCount", active.length);
+  setCount("archivedUnmappedCount", archived.length);
+  setCount("missingUnmappedCount", missing.length);
+
+  renderList(document.getElementById("activeUnmappedList"), active, false);
+  renderList(document.getElementById("archivedUnmappedList"), archived, false, "restore");
+  renderList(document.getElementById("unmappedMissingList"), missing, false);
 }
 
 function renderList(host, issues, draggable, action) {
@@ -259,17 +261,26 @@ function createCard(issue, draggable, action) {
     <div class="issue-title">${escapeHtml(issue.summary || "")}</div>
   `;
 
+  const footer = document.createElement("div");
+  footer.className = "card-footer";
+  const footerStart = document.createElement("div");
+  footerStart.className = "card-footer-start";
+  const footerEnd = document.createElement("div");
+  footerEnd.className = "card-footer-end";
+  footer.append(footerStart, footerEnd);
+
   if (issue.hasUnreadComment) {
     const unreadButton = document.createElement("button");
     unreadButton.className = "comment-alert";
     unreadButton.type = "button";
     unreadButton.title = unreadTitle(issue);
     unreadButton.setAttribute("aria-label", "Marcar comentario como leido");
+    unreadButton.innerHTML = `<span class="comment-alert-dot" aria-hidden="true"></span><span>Sin leer</span>`;
     unreadButton.addEventListener("click", event => {
       event.stopPropagation();
       post("markCommentRead", { issueId: issue.id });
     });
-    card.appendChild(unreadButton);
+    footerStart.appendChild(unreadButton);
   }
 
   card.querySelector(".issue-key").addEventListener("click", event => {
@@ -295,15 +306,7 @@ function createCard(issue, draggable, action) {
       trackerRow.appendChild(elapsed);
     }
 
-    card.appendChild(trackerRow);
-  }
-
-  const trackerError = trackerUi.errorByIssueId[issue.id];
-  if (trackerError) {
-    const error = document.createElement("div");
-    error.className = "tracker-error";
-    error.textContent = trackerError;
-    card.appendChild(error);
+    footerEnd.appendChild(trackerRow);
   }
 
   if (draggable) {
@@ -324,7 +327,7 @@ function createCard(issue, draggable, action) {
     button.textContent = "Archivar";
     button.addEventListener("click", () => post("archiveIssue", { issueId: issue.id }));
     actions.appendChild(button);
-    card.appendChild(actions);
+    footerEnd.appendChild(actions);
   }
 
   if (action === "restore") {
@@ -336,7 +339,19 @@ function createCard(issue, draggable, action) {
     button.textContent = "Restaurar";
     button.addEventListener("click", () => post("restoreIssue", { issueId: issue.id }));
     actions.appendChild(button);
-    card.appendChild(actions);
+    footerEnd.appendChild(actions);
+  }
+
+  if (footerStart.hasChildNodes() || footerEnd.hasChildNodes()) {
+    card.appendChild(footer);
+  }
+
+  const trackerError = trackerUi.errorByIssueId[issue.id];
+  if (trackerError) {
+    const error = document.createElement("div");
+    error.className = "tracker-error";
+    error.textContent = trackerError;
+    card.appendChild(error);
   }
 
   if (transitionMenu.openIssueId === issue.id) {

@@ -4,6 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Kaijura"
+        Icon="Assets/Logo.png"
         Width="1480"
         Height="920"
         MinWidth="1100"
@@ -178,15 +179,22 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.ColumnSpan="4"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       IsHitTestVisible="False"
-                       Foreground="#f0f0f0"
-                       FontFamily="Aptos, Bahnschrift"
-                       FontSize="13"
-                       FontWeight="SemiBold"
-                       Text="Kaijura" />
+            <StackPanel Grid.ColumnSpan="4"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        IsHitTestVisible="False"
+                        Orientation="Horizontal">
+                <Image Width="22"
+                       Height="22"
+                       Margin="0,0,7,0"
+                       Source="Assets/Logo.png" />
+                <TextBlock VerticalAlignment="Center"
+                           Foreground="#f0f0f0"
+                           FontFamily="Aptos, Bahnschrift"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Text="Kaijura" />
+            </StackPanel>
 
             <StackPanel Grid.Column="0"
                         Margin="8,0,0,0"
@@ -211,6 +219,12 @@
                               Tag="missing"
                               Click="OnNavigationButtonClick"
                               AutomationProperties.Name="Ocultos" />
+                <ToggleButton x:Name="UnmappedNavigationButton"
+                              Style="{StaticResource TitlebarNavigationButtonStyle}"
+                              Content="Sin mapear"
+                              Tag="unmapped"
+                              Click="OnNavigationButtonClick"
+                              AutomationProperties.Name="Sin mapear" />
                 <ToggleButton x:Name="SettingsNavigationButton"
                               Style="{StaticResource TitlebarNavigationButtonStyle}"
                               Content="Ajustes"

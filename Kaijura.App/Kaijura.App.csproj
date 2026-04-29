@@ -9,12 +9,18 @@
     <StartupObject>Kaijura.App.App</StartupObject>
     <Version>0.1.0</Version>
     <AssemblyName>Kaijura</AssemblyName>
+    <ApplicationIcon>Assets\Logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <Content Include="Web\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Logo.png" />
+    <Resource Include="Assets\Logo.png" />
   </ItemGroup>
 
   <ItemGroup>
