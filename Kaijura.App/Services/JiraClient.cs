@@ -150,6 +150,26 @@ public sealed class JiraClient : IJiraCommentReader
         }
     }
 
+    public async Task AddWorklogAsync(
+        AppConfig config,
+        string token,
+        string issueIdOrKey,
+        DateTimeOffset startedAt,
+        int timeSpentSeconds,
+        CancellationToken cancellationToken)
+    {
+        var payload = BuildWorklogPayload(startedAt, timeSpentSeconds);
+        var path = $"rest/api/2/issue/{Uri.EscapeDataString(issueIdOrKey)}/worklog";
+        using var request = CreateRequest(HttpMethod.Post, BuildUri(config.JiraHost, path), token);
+        request.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await CreateExceptionAsync(response, $"No se pudo registrar trabajo en {issueIdOrKey}.", cancellationToken);
+        }
+    }
+
     public async Task<JiraComment?> GetLatestRelevantCommentAsync(
         AppConfig config,
         string token,
@@ -416,6 +436,15 @@ public sealed class JiraClient : IJiraCommentReader
         }
 
         return payload;
+    }
+
+    private static Dictionary<string, object> BuildWorklogPayload(DateTimeOffset startedAt, int timeSpentSeconds)
+    {
+        return new Dictionary<string, object>
+        {
+            ["started"] = FormatJiraDate(startedAt),
+            ["timeSpentSeconds"] = Math.Max(60, timeSpentSeconds)
+        };
     }
 
     private static string FormatJiraDate(DateTimeOffset value)

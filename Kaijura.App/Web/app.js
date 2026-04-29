@@ -2,6 +2,7 @@ const state = {
   activeView: "settings",
   columns: [],
   issues: [],
+  activeTracker: null,
   config: {},
   connection: {},
   update: {}
@@ -14,6 +15,11 @@ const transitionMenu = {
   submittingIssueId: null,
   submittingTransitionId: null,
   optionsByIssueId: {},
+  errorByIssueId: {}
+};
+
+const trackerUi = {
+  busyIssueId: null,
   errorByIssueId: {}
 };
 
@@ -43,11 +49,18 @@ window.chrome.webview.addEventListener("message", event => {
     case "transitionResult":
       receiveTransitionResult(event.data.payload);
       break;
+    case "trackerError":
+      receiveTrackerError(event.data.payload);
+      break;
+    case "trackerResult":
+      receiveTrackerResult(event.data.payload);
+      break;
   }
 });
 
 window.addEventListener("DOMContentLoaded", () => {
   bindChrome();
+  setInterval(updateTrackerElapsed, 1000);
   post("ready");
 });
 
@@ -186,14 +199,22 @@ function createCard(issue, draggable, action) {
   card.className = "card";
   card.dataset.issueId = issue.id;
   card.draggable = draggable && issue.kind !== "unmapped";
+  card.classList.toggle("tracker-active", isTrackerActive(issue));
 
   card.innerHTML = `
     <div class="card-top">
       <button class="issue-key card-action" type="button">${escapeHtml(issue.key)}</button>
-      <button class="issue-status" type="button" title="${escapeHtml(issue.jiraStatus || "")}" aria-haspopup="menu" aria-expanded="${transitionMenu.openIssueId === issue.id ? "true" : "false"}">${escapeHtml(issue.jiraStatus || "Sin estado")}</button>
+      <div class="card-top-actions">
+        <button class="issue-status" type="button" title="${escapeHtml(issue.jiraStatus || "")}" aria-haspopup="menu" aria-expanded="${transitionMenu.openIssueId === issue.id ? "true" : "false"}">${escapeHtml(issue.jiraStatus || "Sin estado")}</button>
+      </div>
     </div>
     <div class="issue-title">${escapeHtml(issue.summary || "")}</div>
   `;
+
+  const topActions = card.querySelector(".card-top-actions");
+  if (issue.section === "board" && issue.column === "Progress") {
+    topActions.insertBefore(createTrackerButton(issue), topActions.firstChild);
+  }
 
   if (issue.hasUnreadComment) {
     const unreadButton = document.createElement("button");
@@ -217,6 +238,23 @@ function createCard(issue, draggable, action) {
     event.stopPropagation();
     toggleTransitionMenu(issue.id);
   });
+
+  if (isTrackerActive(issue)) {
+    const trackerRow = document.createElement("div");
+    trackerRow.className = "tracker-row";
+    trackerRow.innerHTML = `
+      <span class="tracker-elapsed" data-tracker-started-at="${escapeHtml(state.activeTracker.startedAt)}">${formatElapsed(state.activeTracker.startedAt)}</span>
+    `;
+    card.appendChild(trackerRow);
+  }
+
+  const trackerError = trackerUi.errorByIssueId[issue.id];
+  if (trackerError) {
+    const error = document.createElement("div");
+    error.className = "tracker-error";
+    error.textContent = trackerError;
+    card.appendChild(error);
+  }
 
   if (draggable) {
     card.addEventListener("dragstart", event => {
@@ -256,6 +294,57 @@ function createCard(issue, draggable, action) {
   }
 
   return card;
+}
+
+function createTrackerButton(issue) {
+  const active = isTrackerActive(issue);
+  const busy = trackerUi.busyIssueId === issue.id;
+  const button = document.createElement("button");
+  button.className = `tracker-button${active ? " active" : ""}`;
+  button.type = "button";
+  button.title = active ? "Parar tracker" : "Iniciar tracker";
+  button.setAttribute("aria-label", active ? "Parar tracker" : "Iniciar tracker");
+  button.disabled = busy;
+  button.innerHTML = `<span class="tracker-icon ${active ? "stop" : "play"}"></span>`;
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    toggleTracker(issue);
+  });
+  return button;
+}
+
+function toggleTracker(issue) {
+  delete trackerUi.errorByIssueId[issue.id];
+
+  if (isTrackerActive(issue)) {
+    trackerUi.busyIssueId = issue.id;
+    render();
+    post("stopTracker", { issueId: issue.id });
+    return;
+  }
+
+  const hasOtherTracker = state.activeTracker && state.activeTracker.issueId !== issue.id;
+  if (hasOtherTracker) {
+    const activeKey = state.activeTracker.issueKey || "otro ticket";
+    const accepted = window.confirm(
+      `Hay un tracker iniciado en ${activeKey}. Se parara y se registrara en Jira antes de iniciar ${issue.key}.`
+    );
+
+    if (!accepted) {
+      return;
+    }
+  }
+
+  trackerUi.busyIssueId = issue.id;
+  render();
+  post("startTracker", {
+    issueId: issue.id,
+    replaceActive: !!hasOtherTracker
+  });
+}
+
+function isTrackerActive(issue) {
+  return !!state.activeTracker && state.activeTracker.issueId === issue.id;
 }
 
 function toggleTransitionMenu(issueId) {
@@ -563,6 +652,27 @@ function receiveTransitionResult(payload) {
   render();
 }
 
+function receiveTrackerError(payload) {
+  if (!payload || !payload.issueId) {
+    trackerUi.busyIssueId = null;
+    render();
+    return;
+  }
+
+  trackerUi.busyIssueId = null;
+  trackerUi.errorByIssueId[payload.issueId] = payload.message || "Tracker no actualizado";
+  render();
+}
+
+function receiveTrackerResult(payload) {
+  if (payload && payload.issueId) {
+    delete trackerUi.errorByIssueId[payload.issueId];
+  }
+
+  trackerUi.busyIssueId = null;
+  render();
+}
+
 function bindDropList(list) {
   if (list.dataset.bound === "true") {
     return;
@@ -690,6 +800,31 @@ function unreadTitle(issue) {
 
 function formatDate(value) {
   return new Date(value).toLocaleString();
+}
+
+function updateTrackerElapsed() {
+  document.querySelectorAll("[data-tracker-started-at]").forEach(element => {
+    element.textContent = formatElapsed(element.dataset.trackerStartedAt);
+  });
+}
+
+function formatElapsed(value) {
+  const started = new Date(value);
+  const elapsed = Math.max(0, Date.now() - started.getTime());
+  const totalSeconds = Math.floor(elapsed / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
+  }
+
+  return `${minutes}:${pad2(seconds)}`;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
 }
 
 function optionLabel(option) {

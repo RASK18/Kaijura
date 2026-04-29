@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -36,6 +37,7 @@ public partial class MainWindow : Window
     private readonly BoardSyncService _syncService = new();
     private readonly JiraTransitionAnalyzer _transitionAnalyzer = new();
     private readonly CommentSyncService _commentSyncService = new();
+    private readonly TimeTrackingService _timeTrackingService = new();
     private readonly UpdateService _updateService = new();
     private readonly DispatcherTimer _refreshTimer = new();
     private readonly DispatcherTimer _relativeTimeTimer = new();
@@ -48,12 +50,15 @@ public partial class MainWindow : Window
     private string _activeView = "settings";
     private bool _webReady;
     private bool _initialRefreshStarted;
+    private bool _allowCloseAfterTrackerStop;
+    private bool _closingTrackerInProgress;
 
     public MainWindow()
     {
         InitializeComponent();
         StateChanged += OnWindowStateChanged;
         Loaded += OnLoaded;
+        Closing += OnClosing;
         Closed += (_, _) =>
         {
             _shutdown.Cancel();
@@ -66,6 +71,55 @@ public partial class MainWindow : Window
         UpdateMaximizeButtonState();
         UpdateNavigationButtonState();
         UpdateTitlebarStatus();
+    }
+
+    private async void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (_allowCloseAfterTrackerStop || _state.ActiveTimeTracker is null)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (_closingTrackerInProgress)
+        {
+            return;
+        }
+
+        var tracker = _state.ActiveTimeTracker;
+        var result = MessageBox.Show(
+            this,
+            $"Hay un tracker iniciado en {tracker.IssueKey}. Antes de cerrar se parara y se registrara en Jira.",
+            "Kaijura",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        _closingTrackerInProgress = true;
+        try
+        {
+            await StopActiveTrackerWithLockAsync(null, DateTimeOffset.Now, saveState: true);
+            _allowCloseAfterTrackerStop = true;
+            Close();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            MessageBox.Show(
+                this,
+                $"No se pudo registrar el tiempo en Jira. La aplicacion seguira abierta.\n\n{FriendlyJiraError(ex)}",
+                "Kaijura",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            SendState();
+        }
+        finally
+        {
+            _closingTrackerInProgress = false;
+        }
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
@@ -187,6 +241,7 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         _state = await _store.LoadAsync(_shutdown.Token);
         _connection = CreateInitialConnection();
+        await ResolvePendingTrackerOnStartupAsync();
         ConfigureRefreshTimer();
         UpdateTitlebarStatus();
 
@@ -262,6 +317,12 @@ public partial class MainWindow : Window
                     break;
                 case "moveIssue":
                     await MoveIssueAsync(payload);
+                    break;
+                case "startTracker":
+                    await StartTrackerAsync(payload);
+                    break;
+                case "stopTracker":
+                    await StopTrackerAsync(payload);
                     break;
                 case "archiveIssue":
                     await ArchiveIssueAsync(payload);
@@ -418,9 +479,220 @@ public partial class MainWindow : Window
 
         var section = ParseSection(request.Section);
         var column = ParseColumn(request.Column);
+        if (ShouldStopActiveTrackerForMove(request.IssueId, section, column))
+        {
+            var lockTaken = false;
+            try
+            {
+                await _refreshLock.WaitAsync(_shutdown.Token);
+                lockTaken = true;
+
+                if (ShouldStopActiveTrackerForMove(request.IssueId, section, column))
+                {
+                    await StopActiveTrackerCoreAsync(request.IssueId, DateTimeOffset.Now, saveState: false, _shutdown.Token);
+                }
+
+                _syncService.MoveIssue(_state, request.IssueId, section, column, request.OrderedIssueIds ?? []);
+                await _store.SaveAsync(_state, _shutdown.Token);
+                SendTrackerResult(request.IssueId);
+                SendState();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                SendTrackerError(request.IssueId, $"No se pudo mover el ticket: {FriendlyJiraError(ex)}");
+                SendState();
+            }
+            finally
+            {
+                if (lockTaken)
+                {
+                    _refreshLock.Release();
+                }
+            }
+
+            return;
+        }
+
         _syncService.MoveIssue(_state, request.IssueId, section, column, request.OrderedIssueIds ?? []);
         await _store.SaveAsync(_state, _shutdown.Token);
         SendState();
+    }
+
+    private async Task StartTrackerAsync(JsonElement payload)
+    {
+        var issueId = payload.TryGetProperty("issueId", out var issueIdElement)
+            ? issueIdElement.GetString() ?? string.Empty
+            : string.Empty;
+        var replaceActive = payload.TryGetProperty("replaceActive", out var replaceElement)
+            && replaceElement.ValueKind == JsonValueKind.True;
+        var lockTaken = false;
+
+        try
+        {
+            await _refreshLock.WaitAsync(_shutdown.Token);
+            lockTaken = true;
+
+            var issue = FindIssue(issueId)
+                ?? throw new InvalidOperationException("No se encontro el ticket en Kaijura.");
+            if (issue.Section != BoardSection.Board || issue.Column != BoardColumn.Progress || issue.IsMissing)
+            {
+                throw new InvalidOperationException("El tracker solo puede iniciarse en tickets de Progress.");
+            }
+
+            if (_state.ActiveTimeTracker is not null)
+            {
+                if (_timeTrackingService.IsActiveFor(_state, issue.JiraId))
+                {
+                    SendTrackerResult(issue.JiraId);
+                    SendState();
+                    return;
+                }
+
+                if (!replaceActive)
+                {
+                    throw new InvalidOperationException("Ya hay un tracker iniciado.");
+                }
+
+                await StopActiveTrackerCoreAsync(null, DateTimeOffset.Now, saveState: false, _shutdown.Token);
+            }
+
+            _timeTrackingService.Start(_state, issue, DateTimeOffset.Now);
+            await _store.SaveAsync(_state, _shutdown.Token);
+            SendTrackerResult(issue.JiraId);
+            SendState();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SendTrackerError(issueId, $"No se pudo iniciar el tracker: {FriendlyJiraError(ex)}");
+            SendState();
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _refreshLock.Release();
+            }
+        }
+    }
+
+    private async Task StopTrackerAsync(JsonElement payload)
+    {
+        var issueId = payload.TryGetProperty("issueId", out var issueIdElement)
+            ? issueIdElement.GetString() ?? string.Empty
+            : string.Empty;
+
+        try
+        {
+            await StopActiveTrackerWithLockAsync(issueId, DateTimeOffset.Now, saveState: true);
+            SendTrackerResult(issueId);
+            SendState();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SendTrackerError(issueId, $"No se pudo parar el tracker: {FriendlyJiraError(ex)}");
+            SendState();
+        }
+    }
+
+    private async Task ResolvePendingTrackerOnStartupAsync()
+    {
+        var tracker = _state.ActiveTimeTracker;
+        if (tracker is null)
+        {
+            return;
+        }
+
+        var result = MessageBox.Show(
+            this,
+            $"Hay un tracker pendiente en {tracker.IssueKey}. Puedes registrarlo ahora en Jira o descartarlo.",
+            "Kaijura",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes)
+        {
+            _timeTrackingService.Discard(_state);
+            await _store.SaveAsync(_state, _shutdown.Token);
+            return;
+        }
+
+        try
+        {
+            await StopActiveTrackerCoreAsync(null, DateTimeOffset.Now, saveState: true, _shutdown.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            MessageBox.Show(
+                this,
+                $"No se pudo registrar el tracker pendiente. Seguira activo para reintentar.\n\n{FriendlyJiraError(ex)}",
+                "Kaijura",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private bool ShouldStopActiveTrackerForMove(string issueId, BoardSection targetSection, BoardColumn targetColumn)
+    {
+        return _timeTrackingService.ShouldStopForMove(_state, issueId, targetSection, targetColumn);
+    }
+
+    private async Task<TimeTrackerWorklog?> StopActiveTrackerWithLockAsync(
+        string? expectedIssueId,
+        DateTimeOffset stoppedAt,
+        bool saveState)
+    {
+        await _refreshLock.WaitAsync(_shutdown.Token);
+        try
+        {
+            return await StopActiveTrackerCoreAsync(expectedIssueId, stoppedAt, saveState, _shutdown.Token);
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private async Task<TimeTrackerWorklog?> StopActiveTrackerCoreAsync(
+        string? expectedIssueId,
+        DateTimeOffset stoppedAt,
+        bool saveState,
+        CancellationToken cancellationToken)
+    {
+        if (_state.ActiveTimeTracker is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedIssueId)
+            && !_timeTrackingService.IsActiveFor(_state, expectedIssueId))
+        {
+            throw new InvalidOperationException("El tracker activo pertenece a otro ticket.");
+        }
+
+        if (!_state.Config.IsReadyForJira)
+        {
+            throw new InvalidOperationException("Configura Jira antes de registrar tiempo.");
+        }
+
+        var jiraToken = _secretProtector.Unprotect(_state.Config.EncryptedToken);
+        var worklog = await _timeTrackingService.StopActiveAsync(
+            _state,
+            async (entry, token) => await _jiraClient.AddWorklogAsync(
+                _state.Config,
+                jiraToken,
+                entry.IssueId,
+                entry.StartedAt,
+                entry.TimeSpentSeconds,
+                token),
+            stoppedAt,
+            cancellationToken);
+
+        if (saveState)
+        {
+            await _store.SaveAsync(_state, cancellationToken);
+        }
+
+        return worklog;
     }
 
     private async Task ArchiveIssueAsync(JsonElement payload)
@@ -626,6 +898,23 @@ public partial class MainWindow : Window
         });
     }
 
+    private void SendTrackerResult(string issueId)
+    {
+        SendWebMessage("trackerResult", new
+        {
+            issueId
+        });
+    }
+
+    private void SendTrackerError(string issueId, string message)
+    {
+        SendWebMessage("trackerError", new
+        {
+            issueId,
+            message
+        });
+    }
+
     private void SendWebMessage(string type, object payload)
     {
         if (!_webReady || Browser.CoreWebView2 is null)
@@ -649,6 +938,14 @@ public partial class MainWindow : Window
             activeView = _activeView,
             connection = _connection,
             update = _update,
+            activeTracker = _state.ActiveTimeTracker is null
+                ? null
+                : new
+                {
+                    issueId = _state.ActiveTimeTracker.IssueId,
+                    issueKey = _state.ActiveTimeTracker.IssueKey,
+                    startedAt = _state.ActiveTimeTracker.StartedAt
+                },
             columns = Enum.GetValues<BoardColumn>().Select(column => new
             {
                 id = ToClient(column),

@@ -202,6 +202,33 @@ public sealed class JiraClientTests
         Assert.Equal("Investigated and fixed", worklog.GetProperty("comment").GetString());
     }
 
+    [Fact]
+    public async Task AddWorklogSendsStartedAndRoundedSeconds()
+    {
+        var handler = new FakeHandler("{}");
+        var client = new JiraClient(new HttpClient(handler));
+        var config = new AppConfig { JiraHost = "https://jira.example.local", UserName = "rafa" };
+        var started = new DateTimeOffset(2026, 4, 29, 10, 15, 0, TimeSpan.FromHours(2));
+
+        await client.AddWorklogAsync(
+            config,
+            "pat-token",
+            "10001",
+            started,
+            180,
+            CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Post, handler.LastRequest?.Method);
+        Assert.Equal("/rest/api/2/issue/10001/worklog", handler.LastRequest?.RequestUri?.AbsolutePath);
+        Assert.NotNull(handler.LastRequestBody);
+
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        var root = document.RootElement;
+        Assert.Equal("2026-04-29T10:15:00.000+0200", root.GetProperty("started").GetString());
+        Assert.Equal(180, root.GetProperty("timeSpentSeconds").GetInt32());
+        Assert.False(root.TryGetProperty("comment", out _));
+    }
+
     private sealed class FakeHandler : HttpMessageHandler
     {
         private readonly Queue<string> _jsonResponses;
