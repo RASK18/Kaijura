@@ -44,6 +44,10 @@ button {
   min-height: 100vh;
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 64px 1fr;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -53,10 +57,43 @@ button {
   border-right: 1px solid var(--border-soft);
 }
 
+.app-shell.sidebar-collapsed .sidebar {
+  gap: 18px;
+  padding: 18px 10px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .brand {
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
+}
+
+.brand-short {
+  display: none;
+}
+
+.sidebar-toggle {
+  flex: 0 0 auto;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  color: var(--text);
+  background: #1a1a1e;
 }
 
 .nav {
@@ -76,6 +113,10 @@ button {
   cursor: pointer;
 }
 
+.nav-short {
+  display: none;
+}
+
 .nav-item:hover {
   color: var(--text);
   background: #1a1a1e;
@@ -85,6 +126,33 @@ button {
   color: var(--text);
   background: var(--surface-2);
   border-color: var(--border);
+}
+
+.app-shell.sidebar-collapsed .brand-row {
+  display: grid;
+  justify-items: center;
+}
+
+.app-shell.sidebar-collapsed .brand-full,
+.app-shell.sidebar-collapsed .nav-label,
+.app-shell.sidebar-collapsed .sidebar-status {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .brand-short,
+.app-shell.sidebar-collapsed .nav-short {
+  display: inline;
+}
+
+.app-shell.sidebar-collapsed .nav-item {
+  min-height: 34px;
+  padding: 0;
+  text-align: center;
+}
+
+.app-shell.sidebar-collapsed .sidebar-toggle {
+  width: 34px;
+  min-width: 34px;
 }
 
 .sidebar-status {
@@ -419,6 +487,13 @@ textarea:focus {
   border-color: var(--primary);
 }
 
+.button:focus-visible,
+.nav-item:focus-visible,
+.sidebar-toggle:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-start;
@@ -427,6 +502,10 @@ textarea:focus {
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 210px 1fr;
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 64px 1fr;
   }
 
   .kanban-grid {

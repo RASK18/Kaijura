@@ -10,12 +10,30 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">Kaijura</div>
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-full">Kaijura</span>
+          <span class="brand-short" aria-hidden="true">K</span>
+        </div>
+        <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Contraer menu" aria-expanded="true" title="Contraer menu">&lt;&lt;</button>
+      </div>
       <nav class="nav">
-        <button class="nav-item" data-view="board">Tablero</button>
-        <button class="nav-item" data-view="archive">Archivo</button>
-        <button class="nav-item" data-view="missing">Ocultos</button>
-        <button class="nav-item" data-view="settings">Configuracion</button>
+        <button class="nav-item" data-view="board" aria-label="Tablero" title="Tablero">
+          <span class="nav-label">Tablero</span>
+          <span class="nav-short" aria-hidden="true">Ta</span>
+        </button>
+        <button class="nav-item" data-view="archive" aria-label="Archivo" title="Archivo">
+          <span class="nav-label">Archivo</span>
+          <span class="nav-short" aria-hidden="true">Ar</span>
+        </button>
+        <button class="nav-item" data-view="missing" aria-label="Ocultos" title="Ocultos">
+          <span class="nav-label">Ocultos</span>
+          <span class="nav-short" aria-hidden="true">Oc</span>
+        </button>
+        <button class="nav-item" data-view="settings" aria-label="Configuracion" title="Configuracion">
+          <span class="nav-label">Configuracion</span>
+          <span class="nav-short" aria-hidden="true">Co</span>
+        </button>
       </nav>
       <div class="sidebar-status">
         <div id="connectionLabel" class="status-line">Sin configurar</div>

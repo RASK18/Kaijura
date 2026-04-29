@@ -21,6 +21,8 @@ const titles = {
   settings: "Configuracion"
 };
 
+const sidebarStorageKey = "kaijura.sidebarCollapsed";
+
 window.chrome.webview.addEventListener("message", event => {
   if (!event.data || event.data.type !== "state") {
     return;
@@ -31,6 +33,7 @@ window.chrome.webview.addEventListener("message", event => {
 });
 
 window.addEventListener("DOMContentLoaded", () => {
+  setSidebarCollapsed(localStorage.getItem(sidebarStorageKey) === "true", false);
   bindChrome();
   post("ready");
 });
@@ -42,10 +45,29 @@ function bindChrome() {
 
   document.getElementById("refreshButton").addEventListener("click", () => post("refresh"));
   document.getElementById("installUpdateButton").addEventListener("click", () => post("installUpdate"));
+  document.getElementById("sidebarToggle").addEventListener("click", () => {
+    const shell = document.querySelector(".app-shell");
+    setSidebarCollapsed(!shell.classList.contains("sidebar-collapsed"), true);
+  });
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
     saveSettings();
   });
+}
+
+function setSidebarCollapsed(isCollapsed, shouldPersist) {
+  const shell = document.querySelector(".app-shell");
+  const toggle = document.getElementById("sidebarToggle");
+
+  shell.classList.toggle("sidebar-collapsed", isCollapsed);
+  toggle.textContent = isCollapsed ? ">>" : "<<";
+  toggle.setAttribute("aria-expanded", String(!isCollapsed));
+  toggle.setAttribute("aria-label", isCollapsed ? "Expandir menu" : "Contraer menu");
+  toggle.title = isCollapsed ? "Expandir menu" : "Contraer menu";
+
+  if (shouldPersist) {
+    localStorage.setItem(sidebarStorageKey, String(isCollapsed));
+  }
 }
 
 function render() {
