@@ -9,6 +9,7 @@ public sealed class AppConfig
     public List<string> TaskIssueTypes { get; set; } = ["Task", "Story", "Tarea"];
     public List<string> IncidentIssueTypes { get; set; } = ["Bug", "Incident", "Incidencia"];
     public List<string> IgnoredCommentAuthors { get; set; } = [];
+    public List<AutomationRule> AutomationRules { get; set; } = [];
     public bool IgnoredCommentAuthorsSeeded { get; set; }
     public int RefreshMinutes { get; set; } = 5;
     public int MaxIssues { get; set; } = 1000;

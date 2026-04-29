@@ -664,8 +664,33 @@ button {
 
 .settings-form {
   display: grid;
-  gap: 16px;
-  max-width: 920px;
+  gap: 18px;
+  max-width: 1100px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.settings-section-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-section-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .form-grid {
@@ -723,8 +748,166 @@ select:focus {
   justify-content: flex-start;
 }
 
+.automation-template-picker,
+.automation-rule-actions,
+.automation-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.automation-warnings,
+.automation-simulation {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #51452e;
+  border-radius: var(--radius);
+  background: #211d16;
+  color: #f3d29d;
+}
+
+.automation-simulation {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.automation-simulation-title {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.automation-simulation-list,
+.automation-simulation-more {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.automation-rules {
+  display: grid;
+  gap: 10px;
+}
+
+.automation-empty {
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--quiet);
+}
+
+.automation-rule {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.automation-rule.disabled {
+  opacity: 0.72;
+}
+
+.automation-rule-summary {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.automation-toggle,
+.automation-stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.automation-toggle input,
+.automation-stop input {
+  width: auto;
+  height: auto;
+}
+
+.automation-rule-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.automation-rule-name {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.automation-rule-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-editor {
+  display: grid;
+  gap: 14px;
+  padding: 0 12px 12px;
+}
+
+.automation-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.automation-conditions {
+  display: grid;
+  gap: 10px;
+}
+
+.automation-subheader {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.automation-condition-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(130px, 160px) minmax(180px, 1.4fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.automation-condition-row input[type="number"] {
+  max-width: 120px;
+}
+
+.automation-condition-text,
+.automation-condition-empty {
+  align-self: center;
+  color: var(--muted);
+}
+
+.automation-stop {
+  padding-top: 2px;
+}
+
 @media (max-width: 1180px) {
   .kanban-grid {
     grid-template-columns: repeat(4, minmax(190px, 1fr));
+  }
+
+  .automation-rule-summary,
+  .automation-condition-row,
+  .automation-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .automation-rule-actions {
+    justify-content: flex-start;
   }
 }

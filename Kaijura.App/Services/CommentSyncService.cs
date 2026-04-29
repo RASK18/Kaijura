@@ -33,7 +33,13 @@ public sealed class CommentSyncService
                     ignoredAuthors,
                     cancellationToken);
 
+                var hadUnreadComment = issue.HasUnreadComment;
                 ApplyLatestComment(issue, latestComment);
+                if (hadUnreadComment != issue.HasUnreadComment)
+                {
+                    issue.PendingAutomationTriggers.Add(AutomationTrigger.RelevantCommentChanged);
+                }
+
                 Interlocked.Increment(ref checkedCount);
             }
             catch (OperationCanceledException)

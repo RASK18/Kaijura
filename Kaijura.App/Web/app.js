@@ -8,6 +8,64 @@ const state = {
   update: {}
 };
 
+const automationUi = {
+  rules: [],
+  sourceSignature: "",
+  isDirty: false,
+  expandedRuleId: null,
+  templatesOpen: false,
+  simulation: null
+};
+
+const automationTriggers = [
+  { id: "TicketNew", label: "Ticket nuevo" },
+  { id: "JiraStatusChanged", label: "Cambio de estado Jira" },
+  { id: "IssueClassificationChanged", label: "Cambio de tipo/clasificacion" },
+  { id: "RelevantCommentChanged", label: "Comentario relevante detectado" },
+  { id: "TemporalCheck", label: "Chequeo temporal" }
+];
+
+const automationScopes = [
+  { id: "All", label: "Todos" },
+  { id: "Task", label: "Tareas" },
+  { id: "Incident", label: "Incidencias" },
+  { id: "Unmapped", label: "Sin mapear" }
+];
+
+const automationLocations = [
+  { id: "Any", label: "Cualquier ubicacion" },
+  { id: "Backlog", label: "Backlog" },
+  { id: "ToDo", label: "Por hacer" },
+  { id: "Progress", label: "En progreso" },
+  { id: "PendingQa", label: "Pendiente QA" },
+  { id: "ValidatedQa", label: "Validado QA" }
+];
+
+const automationDestinations = [
+  { id: "Backlog", label: "Backlog" },
+  { id: "ToDo", label: "Por hacer" },
+  { id: "Progress", label: "En progreso" },
+  { id: "PendingQa", label: "Pendiente QA" },
+  { id: "ValidatedQa", label: "Validado QA" },
+  { id: "Archived", label: "Archivar" }
+];
+
+const automationConditionFields = [
+  { id: "JiraStatus", label: "Estado Jira", type: "values" },
+  { id: "IssueType", label: "Issue type", type: "values" },
+  { id: "HasUnreadComment", label: "Comentario sin leer", type: "bool" },
+  { id: "JiraUpdatedMoreThanDaysAgo", label: "Ultima actualizacion Jira", type: "days" },
+  { id: "FirstSeenMoreThanDaysAgo", label: "Visto por primera vez", type: "days" }
+];
+
+const automationTemplates = [
+  { id: "status", label: "Mover por estado Jira" },
+  { id: "new", label: "Mover tickets nuevos" },
+  { id: "archive", label: "Archivar por estado" },
+  { id: "comment", label: "Mover por comentario sin leer" },
+  { id: "blank", label: "Regla en blanco" }
+];
+
 const transitionMenu = {
   openIssueId: null,
   loadingIssueId: null,
@@ -88,6 +146,10 @@ window.chrome.webview.addEventListener("message", event => {
     case "pendingTrackerResult":
       closeConfirmDialog();
       break;
+    case "automationSimulation":
+      automationUi.simulation = event.data.payload || null;
+      renderAutomationSimulation();
+      break;
   }
 });
 
@@ -99,6 +161,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function bindChrome() {
   document.getElementById("installUpdateButton").addEventListener("click", () => post("installUpdate"));
+  document.getElementById("newAutomationRuleButton").addEventListener("click", () => {
+    automationUi.templatesOpen = !automationUi.templatesOpen;
+    renderAutomation();
+  });
+  document.getElementById("testAutomationRulesButton").addEventListener("click", () => {
+    post("simulateAutomationRules", { automationRules: cleanAutomationRulesForSave(automationUi.rules) });
+  });
   document.getElementById("confirmAcceptButton").addEventListener("click", acceptConfirmDialog);
   document.getElementById("confirmCancelButton").addEventListener("click", cancelConfirmDialog);
   document.getElementById("confirmOverlay").addEventListener("click", event => {
@@ -165,6 +234,701 @@ function renderSettings() {
   setValue("refreshMinutes", config.refreshMinutes || 5);
   setValue("maxIssues", config.maxIssues || 1000);
   setValue("updateRepositoryUrl", config.updateRepositoryUrl || "");
+  syncAutomationDraft(config.automationRules || []);
+  renderAutomation();
+}
+
+function syncAutomationDraft(rules) {
+  const signature = JSON.stringify(rules || []);
+  if (!automationUi.isDirty && automationUi.sourceSignature !== signature) {
+    automationUi.rules = normalizeAutomationRules(rules || []);
+    automationUi.sourceSignature = signature;
+    if (!automationUi.rules.some(rule => rule.id === automationUi.expandedRuleId)) {
+      automationUi.expandedRuleId = automationUi.rules[0]?.id || null;
+    }
+  }
+}
+
+function renderAutomation() {
+  renderAutomationSuggestions();
+  renderAutomationTemplatePicker();
+  renderAutomationWarnings();
+  renderAutomationSimulation();
+
+  const host = document.getElementById("automationRules");
+  host.innerHTML = "";
+
+  if (automationUi.rules.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "automation-empty";
+    empty.textContent = "Sin reglas";
+    host.appendChild(empty);
+    return;
+  }
+
+  automationUi.rules.forEach((rule, index) => {
+    host.appendChild(createAutomationRuleElement(rule, index));
+  });
+}
+
+function renderAutomationTemplatePicker() {
+  const host = document.getElementById("automationTemplatePicker");
+  host.classList.toggle("hidden", !automationUi.templatesOpen);
+  host.innerHTML = "";
+
+  if (!automationUi.templatesOpen) {
+    return;
+  }
+
+  automationTemplates.forEach(template => {
+    const button = document.createElement("button");
+    button.className = "button compact";
+    button.type = "button";
+    button.textContent = template.label;
+    button.addEventListener("click", () => addAutomationRule(template.id));
+    host.appendChild(button);
+  });
+}
+
+function renderAutomationWarnings() {
+  const host = document.getElementById("automationWarnings");
+  const warnings = findAutomationConflicts(automationUi.rules);
+  host.classList.toggle("hidden", warnings.length === 0);
+  host.innerHTML = "";
+
+  warnings.slice(0, 4).forEach(warning => {
+    const item = document.createElement("div");
+    item.textContent = warning;
+    host.appendChild(item);
+  });
+}
+
+function renderAutomationSimulation() {
+  const host = document.getElementById("automationSimulation");
+  if (!host) {
+    return;
+  }
+
+  const simulation = automationUi.simulation;
+  host.classList.toggle("hidden", !simulation);
+  host.innerHTML = "";
+
+  if (!simulation) {
+    return;
+  }
+
+  const total = simulation.total || 0;
+  const title = document.createElement("div");
+  title.className = "automation-simulation-title";
+  title.textContent = total === 0 ? "La prueba no moveria tickets" : `${total} cambios posibles`;
+  host.appendChild(title);
+
+  const applications = simulation.applications || [];
+  if (applications.length > 0) {
+    const list = document.createElement("div");
+    list.className = "automation-simulation-list";
+    applications.forEach(application => {
+      const row = document.createElement("div");
+      row.textContent = `${application.issueKey}: ${automationDestinationLabel(application.from)} -> ${automationDestinationLabel(application.to)} por "${application.ruleName}"`;
+      list.appendChild(row);
+    });
+    host.appendChild(list);
+  }
+
+  if (total > applications.length) {
+    const more = document.createElement("div");
+    more.className = "automation-simulation-more";
+    more.textContent = `Y ${total - applications.length} cambios mas`;
+    host.appendChild(more);
+  }
+}
+
+function createAutomationRuleElement(rule, index) {
+  const article = document.createElement("article");
+  article.className = "automation-rule";
+  article.classList.toggle("disabled", !rule.isEnabled);
+
+  const summary = document.createElement("div");
+  summary.className = "automation-rule-summary";
+
+  const enabledLabel = document.createElement("label");
+  enabledLabel.className = "automation-toggle";
+  const enabledInput = document.createElement("input");
+  enabledInput.type = "checkbox";
+  enabledInput.checked = rule.isEnabled;
+  enabledInput.addEventListener("change", () => {
+    rule.isEnabled = enabledInput.checked;
+    markAutomationDirty(true);
+  });
+  enabledLabel.appendChild(enabledInput);
+  enabledLabel.appendChild(document.createTextNode("Activa"));
+
+  const main = document.createElement("button");
+  main.className = "automation-rule-main";
+  main.type = "button";
+  main.addEventListener("click", () => {
+    automationUi.expandedRuleId = automationUi.expandedRuleId === rule.id ? null : rule.id;
+    renderAutomation();
+  });
+
+  const title = document.createElement("span");
+  title.className = "automation-rule-name";
+  title.textContent = rule.name || "Regla sin nombre";
+  const meta = document.createElement("span");
+  meta.className = "automation-rule-meta";
+  meta.textContent = describeAutomationRule(rule);
+  main.append(title, meta);
+
+  const actions = document.createElement("div");
+  actions.className = "automation-rule-actions";
+  actions.append(
+    createAutomationActionButton("Arriba", () => moveAutomationRule(index, -1), index === 0),
+    createAutomationActionButton("Abajo", () => moveAutomationRule(index, 1), index === automationUi.rules.length - 1),
+    createAutomationActionButton("Eliminar", () => removeAutomationRule(rule.id), false)
+  );
+
+  summary.append(enabledLabel, main, actions);
+  article.appendChild(summary);
+
+  if (automationUi.expandedRuleId === rule.id) {
+    article.appendChild(createAutomationRuleEditor(rule));
+  }
+
+  return article;
+}
+
+function createAutomationRuleEditor(rule) {
+  const editor = document.createElement("div");
+  editor.className = "automation-editor";
+
+  const nameLabel = createTextInput("Nombre", rule.name, value => {
+    rule.name = value;
+    markAutomationDirty();
+  });
+  editor.appendChild(nameLabel);
+
+  const grid = document.createElement("div");
+  grid.className = "automation-editor-grid";
+  grid.append(
+    createSelectInput("Cuando", automationTriggers, rule.trigger, value => {
+      rule.trigger = value;
+      if (value === "TemporalCheck" && !rule.conditions.some(condition => isTemporalCondition(condition))) {
+        rule.conditions.push(defaultAutomationCondition("JiraUpdatedMoreThanDaysAgo"));
+      }
+      markAutomationDirty(true);
+    }),
+    createSelectInput("Tipo", automationScopes, rule.issueScope, value => {
+      rule.issueScope = value;
+      markAutomationDirty(true);
+    }),
+    createSelectInput("Ubicacion actual", automationLocations, rule.currentLocation, value => {
+      rule.currentLocation = value;
+      markAutomationDirty(true);
+    }),
+    createSelectInput("Entonces", automationDestinations, rule.action.destination, value => {
+      rule.action.destination = value;
+      markAutomationDirty(true);
+    })
+  );
+  editor.appendChild(grid);
+
+  const conditions = document.createElement("div");
+  conditions.className = "automation-conditions";
+  const conditionHeader = document.createElement("div");
+  conditionHeader.className = "automation-subheader";
+  conditionHeader.textContent = "Condiciones";
+  conditions.appendChild(conditionHeader);
+
+  if (rule.conditions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "automation-condition-empty";
+    empty.textContent = "Sin condiciones adicionales";
+    conditions.appendChild(empty);
+  } else {
+    rule.conditions.forEach((condition, index) => {
+      conditions.appendChild(createAutomationConditionRow(rule, condition, index));
+    });
+  }
+
+  const conditionActions = document.createElement("div");
+  conditionActions.className = "automation-condition-actions";
+  const addCondition = document.createElement("button");
+  addCondition.className = "button compact";
+  addCondition.type = "button";
+  addCondition.textContent = "Anadir condicion";
+  addCondition.addEventListener("click", () => {
+    rule.conditions.push(defaultAutomationCondition("JiraStatus"));
+    markAutomationDirty(true);
+  });
+  conditionActions.appendChild(addCondition);
+  conditions.appendChild(conditionActions);
+  editor.appendChild(conditions);
+
+  const options = document.createElement("label");
+  options.className = "automation-stop";
+  const stop = document.createElement("input");
+  stop.type = "checkbox";
+  stop.checked = rule.stopProcessing;
+  stop.addEventListener("change", () => {
+    rule.stopProcessing = stop.checked;
+    markAutomationDirty();
+  });
+  options.appendChild(stop);
+  options.appendChild(document.createTextNode("Detener evaluacion si esta regla se aplica"));
+  editor.appendChild(options);
+
+  return editor;
+}
+
+function createAutomationConditionRow(rule, condition, index) {
+  const row = document.createElement("div");
+  row.className = "automation-condition-row";
+
+  const fieldSelect = createBareSelect(automationConditionFields, condition.field);
+  fieldSelect.addEventListener("change", () => {
+    const next = defaultAutomationCondition(fieldSelect.value);
+    Object.assign(condition, next);
+    markAutomationDirty(true);
+  });
+
+  row.appendChild(fieldSelect);
+
+  const field = automationConditionFields.find(candidate => candidate.id === condition.field) || automationConditionFields[0];
+  if (field.type === "values") {
+    const operatorOptions = [
+      { id: "IsAnyOf", label: "es uno de" },
+      { id: "IsNotAnyOf", label: "no es uno de" }
+    ];
+    const operator = createBareSelect(operatorOptions, condition.operator);
+    operator.addEventListener("change", () => {
+      condition.operator = operator.value;
+      markAutomationDirty();
+    });
+    row.appendChild(operator);
+
+    const input = document.createElement("input");
+    input.value = (condition.values || []).join(", ");
+    input.placeholder = field.id === "JiraStatus" ? "Abierta, In Progress" : "Task, Bug";
+    input.setAttribute("list", field.id === "JiraStatus" ? "jiraStatusSuggestions" : "issueTypeSuggestions");
+    input.addEventListener("input", () => {
+      condition.values = splitList(input.value);
+      markAutomationDirty();
+    });
+    row.appendChild(input);
+  } else if (field.type === "bool") {
+    const operatorOptions = [
+      { id: "Is", label: "es" },
+      { id: "IsNot", label: "no es" }
+    ];
+    const boolOptions = [
+      { id: "true", label: "Si" },
+      { id: "false", label: "No" }
+    ];
+    const operator = createBareSelect(operatorOptions, condition.operator);
+    operator.addEventListener("change", () => {
+      condition.operator = operator.value;
+      markAutomationDirty();
+    });
+    const boolValue = createBareSelect(boolOptions, String(Boolean(condition.boolValue)));
+    boolValue.addEventListener("change", () => {
+      condition.boolValue = boolValue.value === "true";
+      markAutomationDirty();
+    });
+    row.append(operator, boolValue);
+  } else {
+    const text = document.createElement("span");
+    text.className = "automation-condition-text";
+    text.textContent = "hace mas de";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.value = condition.days || 1;
+    input.addEventListener("input", () => {
+      condition.days = Number(input.value) || 1;
+      markAutomationDirty();
+    });
+    const suffix = document.createElement("span");
+    suffix.className = "automation-condition-text";
+    suffix.textContent = "dias";
+    row.append(text, input, suffix);
+  }
+
+  const remove = document.createElement("button");
+  remove.className = "button compact";
+  remove.type = "button";
+  remove.textContent = "Eliminar";
+  remove.addEventListener("click", () => {
+    rule.conditions.splice(index, 1);
+    markAutomationDirty(true);
+  });
+  row.appendChild(remove);
+
+  return row;
+}
+
+function createTextInput(label, currentValue, onInput) {
+  const wrapper = document.createElement("label");
+  wrapper.textContent = label;
+  const input = document.createElement("input");
+  input.value = currentValue || "";
+  input.addEventListener("input", () => onInput(input.value.trim()));
+  wrapper.appendChild(input);
+  return wrapper;
+}
+
+function createSelectInput(label, options, currentValue, onChange) {
+  const wrapper = document.createElement("label");
+  wrapper.textContent = label;
+  const select = createBareSelect(options, currentValue);
+  select.addEventListener("change", () => onChange(select.value));
+  wrapper.appendChild(select);
+  return wrapper;
+}
+
+function createBareSelect(options, currentValue) {
+  const select = document.createElement("select");
+  options.forEach(option => {
+    const element = document.createElement("option");
+    element.value = option.id;
+    element.textContent = option.label;
+    select.appendChild(element);
+  });
+  select.value = currentValue;
+  return select;
+}
+
+function createAutomationActionButton(label, onClick, disabled) {
+  const button = document.createElement("button");
+  button.className = "button compact";
+  button.type = "button";
+  button.textContent = label;
+  button.disabled = disabled;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function addAutomationRule(templateId) {
+  const rule = createAutomationRuleFromTemplate(templateId);
+  automationUi.rules.push(rule);
+  automationUi.expandedRuleId = rule.id;
+  automationUi.templatesOpen = false;
+  markAutomationDirty(true);
+}
+
+function moveAutomationRule(index, offset) {
+  const target = index + offset;
+  if (target < 0 || target >= automationUi.rules.length) {
+    return;
+  }
+
+  const [rule] = automationUi.rules.splice(index, 1);
+  automationUi.rules.splice(target, 0, rule);
+  markAutomationDirty(true);
+}
+
+function removeAutomationRule(ruleId) {
+  automationUi.rules = automationUi.rules.filter(rule => rule.id !== ruleId);
+  if (automationUi.expandedRuleId === ruleId) {
+    automationUi.expandedRuleId = automationUi.rules[0]?.id || null;
+  }
+  markAutomationDirty(true);
+}
+
+function markAutomationDirty(shouldRender = false) {
+  automationUi.isDirty = true;
+  automationUi.simulation = null;
+  if (shouldRender) {
+    renderAutomation();
+    return;
+  }
+
+  renderAutomationWarnings();
+  renderAutomationSimulation();
+}
+
+function normalizeAutomationRules(rules) {
+  return (rules || []).map(rule => ({
+    id: rule.id || createAutomationId(),
+    name: rule.name || "Regla sin nombre",
+    isEnabled: Boolean(rule.isEnabled),
+    trigger: rule.trigger || "TicketNew",
+    issueScope: rule.issueScope || "All",
+    currentLocation: rule.currentLocation || "Any",
+    conditions: (rule.conditions || []).map(normalizeAutomationCondition),
+    action: {
+      destination: rule.action?.destination || "ToDo"
+    },
+    stopProcessing: rule.stopProcessing !== false
+  }));
+}
+
+function normalizeAutomationCondition(condition) {
+  const field = condition.field || "JiraStatus";
+  const defaultCondition = defaultAutomationCondition(field);
+  return {
+    ...defaultCondition,
+    operator: condition.operator || defaultCondition.operator,
+    values: condition.values || [],
+    boolValue: Boolean(condition.boolValue),
+    days: Number(condition.days) || defaultCondition.days
+  };
+}
+
+function cleanAutomationRulesForSave(rules) {
+  return normalizeAutomationRules(rules).map(rule => ({
+    id: rule.id || createAutomationId(),
+    name: rule.name || "Regla sin nombre",
+    isEnabled: Boolean(rule.isEnabled),
+    trigger: rule.trigger,
+    issueScope: rule.issueScope,
+    currentLocation: rule.currentLocation,
+    conditions: rule.conditions
+      .map(cleanAutomationConditionForSave)
+      .filter(Boolean),
+    action: {
+      destination: rule.action.destination
+    },
+    stopProcessing: rule.stopProcessing !== false
+  }));
+}
+
+function cleanAutomationConditionForSave(condition) {
+  const field = automationConditionFields.find(candidate => candidate.id === condition.field) || automationConditionFields[0];
+  if (field.type === "values") {
+    const values = (condition.values || []).map(value => value.trim()).filter(Boolean);
+    if (values.length === 0) {
+      return null;
+    }
+
+    return {
+      field: field.id,
+      operator: condition.operator === "IsNotAnyOf" ? "IsNotAnyOf" : "IsAnyOf",
+      values,
+      boolValue: false,
+      days: 0
+    };
+  }
+
+  if (field.type === "bool") {
+    return {
+      field: field.id,
+      operator: condition.operator === "IsNot" ? "IsNot" : "Is",
+      values: [],
+      boolValue: Boolean(condition.boolValue),
+      days: 0
+    };
+  }
+
+  const days = Number(condition.days) || 0;
+  if (days <= 0) {
+    return null;
+  }
+
+  return {
+    field: field.id,
+    operator: "MoreThanDaysAgo",
+    values: [],
+    boolValue: false,
+    days
+  };
+}
+
+function defaultAutomationCondition(field) {
+  const definition = automationConditionFields.find(candidate => candidate.id === field) || automationConditionFields[0];
+  if (definition.type === "bool") {
+    return { field: definition.id, operator: "Is", values: [], boolValue: true, days: 0 };
+  }
+
+  if (definition.type === "days") {
+    return { field: definition.id, operator: "MoreThanDaysAgo", values: [], boolValue: false, days: 7 };
+  }
+
+  return { field: definition.id, operator: "IsAnyOf", values: [], boolValue: false, days: 0 };
+}
+
+function createAutomationRuleFromTemplate(templateId) {
+  const rule = {
+    id: createAutomationId(),
+    name: "Regla sin nombre",
+    isEnabled: false,
+    trigger: "TicketNew",
+    issueScope: "All",
+    currentLocation: "Any",
+    conditions: [],
+    action: { destination: "ToDo" },
+    stopProcessing: true
+  };
+
+  if (templateId === "status") {
+    rule.name = "Mover por estado Jira";
+    rule.trigger = "JiraStatusChanged";
+    rule.currentLocation = "Backlog";
+    rule.conditions = [defaultAutomationCondition("JiraStatus")];
+  } else if (templateId === "new") {
+    rule.name = "Mover tickets nuevos";
+    rule.trigger = "TicketNew";
+    rule.currentLocation = "Backlog";
+  } else if (templateId === "archive") {
+    rule.name = "Archivar por estado";
+    rule.trigger = "JiraStatusChanged";
+    rule.conditions = [defaultAutomationCondition("JiraStatus")];
+    rule.action.destination = "Archived";
+  } else if (templateId === "comment") {
+    rule.name = "Mover por comentario sin leer";
+    rule.trigger = "RelevantCommentChanged";
+    rule.conditions = [defaultAutomationCondition("HasUnreadComment")];
+    rule.action.destination = "Progress";
+  }
+
+  return rule;
+}
+
+function describeAutomationRule(rule) {
+  const parts = [
+    `Cuando ${automationTriggerLabel(rule.trigger)}`,
+    `si ${describeAutomationScope(rule)}`,
+    `entonces ${automationActionLabel(rule.action.destination)}`
+  ];
+  return parts.join(" - ");
+}
+
+function describeAutomationScope(rule) {
+  const scope = rule.issueScope === "All" ? "todos" : `tipo ${automationScopeLabel(rule.issueScope)}`;
+  const location = rule.currentLocation === "Any" ? "cualquier ubicacion" : `ubicacion ${automationLocationLabel(rule.currentLocation)}`;
+  const conditions = rule.conditions.map(describeAutomationCondition).filter(Boolean);
+  return [scope, location, ...conditions].join(", ");
+}
+
+function describeAutomationCondition(condition) {
+  const field = automationConditionFields.find(candidate => candidate.id === condition.field);
+  if (!field) {
+    return "";
+  }
+
+  if (field.type === "values") {
+    const values = (condition.values || []).join(", ");
+    const operator = condition.operator === "IsNotAnyOf" ? "no es" : "es";
+    return values ? `${field.label} ${operator} ${values}` : "";
+  }
+
+  if (field.type === "bool") {
+    const value = condition.boolValue ? "si" : "no";
+    const operator = condition.operator === "IsNot" ? "no es" : "es";
+    return `${field.label} ${operator} ${value}`;
+  }
+
+  return `${field.label} hace mas de ${condition.days || 1} dias`;
+}
+
+function automationTriggerLabel(value) {
+  return labelFrom(automationTriggers, value);
+}
+
+function automationScopeLabel(value) {
+  return labelFrom(automationScopes, value);
+}
+
+function automationLocationLabel(value) {
+  return labelFrom(automationLocations, value);
+}
+
+function automationDestinationLabel(value) {
+  return labelFrom(automationDestinations, value);
+}
+
+function automationActionLabel(destination) {
+  return destination === "Archived"
+    ? "archivar"
+    : `mover a ${automationDestinationLabel(destination)}`;
+}
+
+function labelFrom(options, value) {
+  return options.find(option => option.id === value)?.label || value;
+}
+
+function isTemporalCondition(condition) {
+  return condition.field === "JiraUpdatedMoreThanDaysAgo" || condition.field === "FirstSeenMoreThanDaysAgo";
+}
+
+function createAutomationId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `rule-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+}
+
+function renderAutomationSuggestions() {
+  renderDatalist("jiraStatusSuggestions", distinctValues(state.issues.map(issue => issue.jiraStatus)));
+  renderDatalist("issueTypeSuggestions", distinctValues(state.issues.map(issue => issue.issueType)));
+}
+
+function renderDatalist(id, values) {
+  const host = document.getElementById(id);
+  host.innerHTML = "";
+  values.forEach(value => {
+    const option = document.createElement("option");
+    option.value = value;
+    host.appendChild(option);
+  });
+}
+
+function distinctValues(values) {
+  return values
+    .map(value => (value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, all) => all.findIndex(candidate => candidate.toLowerCase() === value.toLowerCase()) === index)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function findAutomationConflicts(rules) {
+  const warnings = [];
+  const activeRules = rules.filter(rule => rule.isEnabled);
+  for (let leftIndex = 0; leftIndex < activeRules.length; leftIndex++) {
+    for (let rightIndex = leftIndex + 1; rightIndex < activeRules.length; rightIndex++) {
+      const left = activeRules[leftIndex];
+      const right = activeRules[rightIndex];
+      if (left.trigger !== right.trigger
+        || left.action.destination === right.action.destination
+        || !automationScopesOverlap(left.issueScope, right.issueScope)
+        || !automationLocationsOverlap(left.currentLocation, right.currentLocation)
+        || !automationStatusConditionsOverlap(left, right)) {
+        continue;
+      }
+
+      warnings.push(`"${left.name}" puede coincidir con "${right.name}". Se ejecutara primero la regla que este mas arriba.`);
+    }
+  }
+
+  return warnings;
+}
+
+function automationScopesOverlap(left, right) {
+  return left === "All" || right === "All" || left === right;
+}
+
+function automationLocationsOverlap(left, right) {
+  return left === "Any" || right === "Any" || left === right;
+}
+
+function automationStatusConditionsOverlap(left, right) {
+  const leftValues = automationPositiveStatusValues(left);
+  const rightValues = automationPositiveStatusValues(right);
+  if (!leftValues || !rightValues) {
+    return true;
+  }
+
+  return leftValues.some(value => rightValues.includes(value));
+}
+
+function automationPositiveStatusValues(rule) {
+  const statusConditions = rule.conditions.filter(condition => condition.field === "JiraStatus");
+  if (statusConditions.length !== 1 || statusConditions[0].operator !== "IsAnyOf") {
+    return null;
+  }
+
+  const values = statusConditions[0].values.map(value => value.trim().toLowerCase()).filter(Boolean);
+  return values.length > 0 ? values : null;
 }
 
 function renderBoard() {
@@ -988,6 +1752,10 @@ function filterIssues(section, kind, column) {
 }
 
 function saveSettings() {
+  const automationRules = cleanAutomationRulesForSave(automationUi.rules);
+  automationUi.rules = automationRules;
+  automationUi.isDirty = false;
+  automationUi.sourceSignature = JSON.stringify(automationRules);
   post("saveSettings", {
     jiraHost: value("jiraHost"),
     userName: value("userName"),
@@ -996,6 +1764,7 @@ function saveSettings() {
     taskIssueTypes: splitList(value("taskIssueTypes")),
     incidentIssueTypes: splitList(value("incidentIssueTypes")),
     ignoredCommentAuthors: splitList(value("ignoredCommentAuthors")),
+    automationRules,
     refreshMinutes: Number(value("refreshMinutes")) || 5,
     maxIssues: Number(value("maxIssues")) || 1000,
     updateRepositoryUrl: value("updateRepositoryUrl")

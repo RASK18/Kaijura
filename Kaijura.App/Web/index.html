@@ -99,52 +99,74 @@
 
       <section id="settingsView" class="view hidden">
         <form id="settingsForm" class="settings-form">
-          <div class="form-grid">
-            <label>
-              Host Jira
-              <input id="jiraHost" name="jiraHost" autocomplete="off" placeholder="https://jira.empresa.local">
-            </label>
-            <label>
-              Usuario
-              <input id="userName" name="userName" autocomplete="username">
-            </label>
-            <label>
-              Token personal
-              <input id="token" name="token" type="password" autocomplete="off">
-            </label>
-            <label>
-              Refresco automatico (min)
-              <input id="refreshMinutes" name="refreshMinutes" type="number" min="1" max="120">
-            </label>
-          </div>
+          <section class="settings-section">
+            <div class="settings-section-title">Conexion Jira</div>
+            <div class="form-grid">
+              <label>
+                Host Jira
+                <input id="jiraHost" name="jiraHost" autocomplete="off" placeholder="https://jira.empresa.local">
+              </label>
+              <label>
+                Usuario
+                <input id="userName" name="userName" autocomplete="username">
+              </label>
+              <label>
+                Token personal
+                <input id="token" name="token" type="password" autocomplete="off">
+              </label>
+              <label>
+                Refresco automatico (min)
+                <input id="refreshMinutes" name="refreshMinutes" type="number" min="1" max="120">
+              </label>
+            </div>
+          </section>
 
-          <label>
-            JQL
-            <textarea id="jql" name="jql" rows="5"></textarea>
-          </label>
+          <section class="settings-section">
+            <div class="settings-section-title">Consulta y clasificacion</div>
+            <label>
+              JQL
+              <textarea id="jql" name="jql" rows="5"></textarea>
+            </label>
 
-          <div class="form-grid">
-            <label>
-              Issue types de tareas
-              <input id="taskIssueTypes" name="taskIssueTypes" placeholder="Task, Story, Tarea">
-            </label>
-            <label>
-              Issue types de incidencias
-              <input id="incidentIssueTypes" name="incidentIssueTypes" placeholder="Bug, Incident, Incidencia">
-            </label>
-            <label>
-              Autores de comentarios ignorados
-              <input id="ignoredCommentAuthors" name="ignoredCommentAuthors" placeholder="bot-jira, CI Bot">
-            </label>
-            <label>
-              Maximo de tickets
-              <input id="maxIssues" name="maxIssues" type="number" min="1" max="5000">
-            </label>
-            <label>
-              GitHub Releases
-              <input id="updateRepositoryUrl" name="updateRepositoryUrl" autocomplete="off">
-            </label>
-          </div>
+            <div class="form-grid">
+              <label>
+                Issue types de tareas
+                <input id="taskIssueTypes" name="taskIssueTypes" placeholder="Task, Story, Tarea">
+              </label>
+              <label>
+                Issue types de incidencias
+                <input id="incidentIssueTypes" name="incidentIssueTypes" placeholder="Bug, Incident, Incidencia">
+              </label>
+              <label>
+                Autores de comentarios ignorados
+                <input id="ignoredCommentAuthors" name="ignoredCommentAuthors" placeholder="bot-jira, CI Bot">
+              </label>
+              <label>
+                Maximo de tickets
+                <input id="maxIssues" name="maxIssues" type="number" min="1" max="5000">
+              </label>
+              <label>
+                GitHub Releases
+                <input id="updateRepositoryUrl" name="updateRepositoryUrl" autocomplete="off">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-header">
+              <div class="settings-section-title">Automatizaciones</div>
+              <div class="settings-section-actions">
+                <button id="testAutomationRulesButton" class="button compact" type="button">Probar reglas</button>
+                <button id="newAutomationRuleButton" class="button compact" type="button">Nueva regla</button>
+              </div>
+            </div>
+            <div id="automationTemplatePicker" class="automation-template-picker hidden"></div>
+            <div id="automationWarnings" class="automation-warnings hidden"></div>
+            <div id="automationSimulation" class="automation-simulation hidden"></div>
+            <div id="automationRules" class="automation-rules"></div>
+            <datalist id="jiraStatusSuggestions"></datalist>
+            <datalist id="issueTypeSuggestions"></datalist>
+          </section>
 
           <div class="form-actions">
             <button class="button primary" type="submit">Guardar y conectar</button>

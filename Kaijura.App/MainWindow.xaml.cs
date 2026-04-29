@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private readonly ISecretProtector _secretProtector = new DpapiSecretProtector();
     private readonly JiraClient _jiraClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
     private readonly BoardSyncService _syncService = new();
+    private readonly AutomationRuleService _automationService = new();
     private readonly JiraTransitionAnalyzer _transitionAnalyzer = new();
     private readonly CommentSyncService _commentSyncService = new();
     private readonly TimeTrackingService _timeTrackingService = new();
@@ -293,6 +294,9 @@ public partial class MainWindow : Window
                 case "saveSettings":
                     await SaveSettingsAsync(payload);
                     break;
+                case "simulateAutomationRules":
+                    SimulateAutomationRules(payload);
+                    break;
                 case "refresh":
                     await RefreshJiraAsync(isAutoRefresh: false);
                     break;
@@ -377,6 +381,7 @@ public partial class MainWindow : Window
         _state.Config.TaskIssueTypes = CleanList(settings.TaskIssueTypes ?? []);
         _state.Config.IncidentIssueTypes = CleanList(settings.IncidentIssueTypes ?? []);
         _state.Config.IgnoredCommentAuthors = CleanList(settings.IgnoredCommentAuthors ?? []);
+        _state.Config.AutomationRules = CleanAutomationRules(settings.AutomationRules ?? []);
         _state.Config.SeedIgnoredCommentAuthorsWithUserName();
         _state.Config.RefreshMinutes = Math.Clamp(settings.RefreshMinutes, 1, 120);
         _state.Config.MaxIssues = Math.Clamp(settings.MaxIssues, 1, 5000);
@@ -405,6 +410,20 @@ public partial class MainWindow : Window
         SendState();
         await RefreshJiraAsync(isAutoRefresh: false);
         _ = CheckForUpdatesAsync();
+    }
+
+    private void SimulateAutomationRules(JsonElement payload)
+    {
+        var request = payload.Deserialize<AutomationRulesPayload>(JsonOptions)
+            ?? throw new InvalidOperationException("Reglas vacias.");
+        var rules = CleanAutomationRules(request.AutomationRules ?? []);
+        var result = _automationService.Simulate(_state, rules, DateTimeOffset.Now);
+
+        SendWebMessage("automationSimulation", new
+        {
+            total = result.Applications.Count,
+            applications = result.Applications.Take(50)
+        });
     }
 
     private async Task RefreshJiraAsync(bool isAutoRefresh)
@@ -438,10 +457,11 @@ public partial class MainWindow : Window
                 _jiraClient,
                 token,
                 _shutdown.Token);
+            var automationResult = _automationService.ApplyPending(_state, DateTimeOffset.Now);
 
             _state.LastSuccessfulSyncAt = DateTimeOffset.Now;
             _connection.Status = "connected";
-            _connection.Message = BuildSyncMessage(summary, commentSummary);
+            _connection.Message = BuildSyncMessage(summary, commentSummary, automationResult);
             _connection.IsConfigured = true;
             _activeView = "board";
             ConfigureRefreshTimer();
@@ -819,7 +839,9 @@ public partial class MainWindow : Window
 
             await _jiraClient.TransitionIssueAsync(_state.Config, token, issue.JiraId, transitionUpdate, _shutdown.Token);
             var updatedIssue = await _jiraClient.GetIssueAsync(_state.Config, token, issue.JiraId, _shutdown.Token);
-            _syncService.UpdateIssueFromJira(_state, updatedIssue, DateTimeOffset.Now);
+            var now = DateTimeOffset.Now;
+            _syncService.UpdateIssueFromJira(_state, updatedIssue, now);
+            _automationService.ApplyPending(_state, now);
             await _store.SaveAsync(_state, _shutdown.Token);
 
             SendState();
@@ -982,6 +1004,7 @@ public partial class MainWindow : Window
                 _state.Config.TaskIssueTypes,
                 _state.Config.IncidentIssueTypes,
                 _state.Config.IgnoredCommentAuthors,
+                _state.Config.AutomationRules,
                 _state.Config.RefreshMinutes,
                 _state.Config.MaxIssues,
                 _state.Config.UpdateRepositoryUrl,
@@ -1005,6 +1028,7 @@ public partial class MainWindow : Window
                     issue.IsMissing,
                     issue.MissingSince,
                     issue.ArchivedAt,
+                    issue.JiraUpdatedAt,
                     issue.HasUnreadComment,
                     issue.LastRelevantCommentAuthor,
                     issue.LastRelevantCommentAt,
@@ -1013,7 +1037,10 @@ public partial class MainWindow : Window
         };
     }
 
-    private static string BuildSyncMessage(SyncSummary summary, CommentSyncSummary commentSummary)
+    private static string BuildSyncMessage(
+        SyncSummary summary,
+        CommentSyncSummary commentSummary,
+        AutomationRuleResult automationResult)
     {
         List<string> messages = [];
 
@@ -1025,6 +1052,11 @@ public partial class MainWindow : Window
         if (commentSummary.FailedCount > 0)
         {
             messages.Add($"{commentSummary.FailedCount} tickets sin comprobar comentarios.");
+        }
+
+        if (automationResult.Applications.Count > 0)
+        {
+            messages.Add($"{automationResult.Applications.Count} reglas aplicadas.");
         }
 
         return string.Join(" ", messages);
@@ -1100,6 +1132,74 @@ public partial class MainWindow : Window
             .ToList();
     }
 
+    private static List<AutomationRule> CleanAutomationRules(IEnumerable<AutomationRule> rules)
+    {
+        return rules.Select(rule => new AutomationRule
+            {
+                Id = string.IsNullOrWhiteSpace(rule.Id) ? Guid.NewGuid().ToString("N") : rule.Id.Trim(),
+                Name = string.IsNullOrWhiteSpace(rule.Name) ? "Regla sin nombre" : rule.Name.Trim(),
+                IsEnabled = rule.IsEnabled,
+                Trigger = rule.Trigger,
+                IssueScope = rule.IssueScope,
+                CurrentLocation = rule.CurrentLocation,
+                Conditions = CleanAutomationConditions(rule.Conditions ?? []),
+                Action = new AutomationAction
+                {
+                    Destination = rule.Action?.Destination ?? AutomationDestination.ToDo
+                },
+                StopProcessing = rule.StopProcessing
+            })
+            .ToList();
+    }
+
+    private static List<AutomationCondition> CleanAutomationConditions(IEnumerable<AutomationCondition> conditions)
+    {
+        return conditions
+            .Select(CleanAutomationCondition)
+            .Where(condition => condition is not null)
+            .Cast<AutomationCondition>()
+            .ToList();
+    }
+
+    private static AutomationCondition? CleanAutomationCondition(AutomationCondition condition)
+    {
+        if (condition.Field is AutomationConditionField.JiraStatus or AutomationConditionField.IssueType)
+        {
+            var values = CleanList(condition.Values ?? []);
+            return values.Count == 0
+                ? null
+                : new AutomationCondition
+                {
+                    Field = condition.Field,
+                    Operator = condition.Operator == AutomationConditionOperator.IsNotAnyOf
+                        ? AutomationConditionOperator.IsNotAnyOf
+                        : AutomationConditionOperator.IsAnyOf,
+                    Values = values
+                };
+        }
+
+        if (condition.Field == AutomationConditionField.HasUnreadComment)
+        {
+            return new AutomationCondition
+            {
+                Field = condition.Field,
+                Operator = condition.Operator == AutomationConditionOperator.IsNot
+                    ? AutomationConditionOperator.IsNot
+                    : AutomationConditionOperator.Is,
+                BoolValue = condition.BoolValue
+            };
+        }
+
+        return condition.Days <= 0
+            ? null
+            : new AutomationCondition
+            {
+                Field = condition.Field,
+                Operator = AutomationConditionOperator.MoreThanDaysAgo,
+                Days = condition.Days
+            };
+    }
+
     private static BoardSection ParseSection(string value)
     {
         return value.Equals("board", StringComparison.OrdinalIgnoreCase)
@@ -1165,9 +1265,12 @@ public partial class MainWindow : Window
         List<string> TaskIssueTypes,
         List<string> IncidentIssueTypes,
         List<string> IgnoredCommentAuthors,
+        List<AutomationRule>? AutomationRules,
         int RefreshMinutes,
         int MaxIssues,
         string UpdateRepositoryUrl);
+
+    private sealed record AutomationRulesPayload(List<AutomationRule>? AutomationRules);
 
     private sealed record MoveIssuePayload(
         string IssueId,

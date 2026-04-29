@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Kaijura.App.Models;
 
 public sealed class IssueState
@@ -16,6 +18,7 @@ public sealed class IssueState
     public bool IsMissing { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
+    public DateTimeOffset? JiraUpdatedAt { get; set; }
     public DateTimeOffset? MissingSince { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
     public bool CommentBaselineEstablished { get; set; }
@@ -24,4 +27,7 @@ public sealed class IssueState
     public string LastReadCommentId { get; set; } = string.Empty;
     public string LastRelevantCommentAuthor { get; set; } = string.Empty;
     public DateTimeOffset? LastRelevantCommentAt { get; set; }
+
+    [JsonIgnore]
+    public HashSet<AutomationTrigger> PendingAutomationTriggers { get; } = [];
 }

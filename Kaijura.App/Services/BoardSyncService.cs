@@ -20,6 +20,7 @@ public sealed class BoardSyncService
             if (!byId.TryGetValue(id, out var issue))
             {
                 issue = CreateIssueState(jiraIssue, state, now);
+                issue.PendingAutomationTriggers.Add(AutomationTrigger.TicketNew);
                 state.Issues.Add(issue);
                 byId[id] = issue;
             }
@@ -142,7 +143,8 @@ public sealed class BoardSyncService
             Column = BoardColumn.ToDo,
             SortOrder = NextSortOrder(state, BoardSection.Backlog, kind, BoardColumn.ToDo),
             FirstSeenAt = now,
-            LastSeenAt = now
+            LastSeenAt = now,
+            JiraUpdatedAt = jiraIssue.Updated
         };
 
         return issue;
@@ -150,13 +152,30 @@ public sealed class BoardSyncService
 
     private void UpdateFromJira(IssueState issue, JiraIssue jiraIssue, AppConfig config, DateTimeOffset now)
     {
+        var previousStatus = issue.JiraStatus;
+        var previousIssueType = issue.IssueType;
+        var previousKind = issue.Kind;
+        var kind = Classify(jiraIssue.IssueType, config);
+
         issue.Key = jiraIssue.Key;
         issue.Summary = jiraIssue.Summary;
         issue.JiraStatus = jiraIssue.JiraStatus;
         issue.IssueType = jiraIssue.IssueType;
         issue.BrowseUrl = jiraIssue.BrowseUrl;
-        issue.Kind = Classify(jiraIssue.IssueType, config);
+        issue.Kind = kind;
         issue.LastSeenAt = now;
+        issue.JiraUpdatedAt = jiraIssue.Updated;
+
+        if (!string.Equals(previousStatus, issue.JiraStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.JiraStatusChanged);
+        }
+
+        if (!string.Equals(previousIssueType, issue.IssueType, StringComparison.OrdinalIgnoreCase)
+            || previousKind != issue.Kind)
+        {
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.IssueClassificationChanged);
+        }
     }
 
     private static void RestoreIfReturned(IssueState issue)
