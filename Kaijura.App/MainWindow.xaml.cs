@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Kaijura.App.Models;
 using Kaijura.App.Services;
@@ -16,6 +18,21 @@ namespace Kaijura.App;
 public partial class MainWindow : Window
 {
     private const string AppHost = "app.kaijura.local";
+    private const int DwmAttributeUseImmersiveDarkMode = 20;
+    private const int DwmAttributeUseImmersiveDarkModeBefore20H1 = 19;
+    private const int DwmAttributeCaptionColor = 35;
+    private const int DwmAttributeTextColor = 36;
+    private const int GwlExStyle = -20;
+    private const int IconSmall = 0;
+    private const int IconBig = 1;
+    private const int WmSetIcon = 0x0080;
+    private const uint TitleBarBackground = 0x00100e0e;
+    private const uint TitleBarForeground = 0x00f0f0f0;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpFrameChanged = 0x0020;
+    private const long WsExDlgModalFrame = 0x00000001L;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -45,6 +62,58 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closed += (_, _) => _shutdown.Cancel();
         _refreshTimer.Tick += async (_, _) => await RefreshJiraAsync(isAutoRefresh: true);
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        HideTitleBarIcon();
+        ApplyDarkTitleBar();
+    }
+
+    private void ApplyDarkTitleBar()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var enabled = 1;
+        if (DwmSetWindowAttribute(
+            handle,
+            DwmAttributeUseImmersiveDarkMode,
+            ref enabled,
+            Marshal.SizeOf<int>()) != 0)
+        {
+            _ = DwmSetWindowAttribute(
+                handle,
+                DwmAttributeUseImmersiveDarkModeBefore20H1,
+                ref enabled,
+                Marshal.SizeOf<int>());
+        }
+
+        var background = TitleBarBackground;
+        _ = DwmSetWindowAttribute(handle, DwmAttributeCaptionColor, ref background, Marshal.SizeOf<uint>());
+
+        var foreground = TitleBarForeground;
+        _ = DwmSetWindowAttribute(handle, DwmAttributeTextColor, ref foreground, Marshal.SizeOf<uint>());
+    }
+
+    private void HideTitleBarIcon()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle);
+        SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle.ToInt64() | WsExDlgModalFrame));
+
+        _ = SendMessage(handle, WmSetIcon, new IntPtr(IconSmall), IntPtr.Zero);
+        _ = SendMessage(handle, WmSetIcon, new IntPtr(IconBig), IntPtr.Zero);
+        _ = SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -545,6 +614,60 @@ public partial class MainWindow : Window
     {
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute", ExactSpelling = true)]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        ref int pvAttribute,
+        int cbAttribute);
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute", ExactSpelling = true)]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        ref uint pvAttribute,
+        int cbAttribute);
+
+    private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hwnd, index)
+            : new IntPtr(GetWindowLong32(hwnd, index));
+    }
+
+    private static IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value)
+    {
+        return IntPtr.Size == 8
+            ? SetWindowLongPtr64(hwnd, index, value)
+            : new IntPtr(SetWindowLong32(hwnd, index, value.ToInt32()));
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", ExactSpelling = true)]
+    private static extern int GetWindowLong32(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", ExactSpelling = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", ExactSpelling = true)]
+    private static extern int SetWindowLong32(IntPtr hwnd, int index, int value);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", ExactSpelling = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hwnd, int index, IntPtr value);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr hwnd,
+        IntPtr hwndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint flags);
 
     private sealed record SettingsPayload(
         string JiraHost,
