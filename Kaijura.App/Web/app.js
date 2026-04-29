@@ -381,6 +381,11 @@ function createTransitionForm(issue, option) {
     form.appendChild(createTextareaField(textFieldControlName(index), field.name || field.id, true));
   });
 
+  const selectFields = option.requiredSelectFields || [];
+  selectFields.forEach((field, index) => {
+    form.appendChild(createSelectField(selectFieldControlName(index), field.name || field.id, field.options || []));
+  });
+
   const actions = document.createElement("div");
   actions.className = "status-form-actions";
 
@@ -414,12 +419,18 @@ function createTransitionForm(issue, option) {
     textFields.forEach((field, index) => {
       submittedTextFields[field.id] = form.elements[textFieldControlName(index)]?.value || "";
     });
+    const submittedSelectFields = {};
+    selectFields.forEach((field, index) => {
+      const selectedIndex = Number(form.elements[selectFieldControlName(index)]?.value ?? -1);
+      submittedSelectFields[field.id] = field.options?.[selectedIndex] || {};
+    });
 
     submitTransition(issue.id, option, {
       comment: form.elements.comment?.value || "",
       worklogTimeSpent: form.elements.worklogTimeSpent?.value || "",
       worklogComment: form.elements.worklogComment?.value || "",
-      textFields: submittedTextFields
+      textFields: submittedTextFields,
+      selectFields: submittedSelectFields
     });
   });
 
@@ -441,6 +452,37 @@ function createTextareaField(name, labelText, required) {
 
 function textFieldControlName(index) {
   return `textField${index}`;
+}
+
+function selectFieldControlName(index) {
+  return `selectField${index}`;
+}
+
+function createSelectField(name, labelText, options) {
+  const label = document.createElement("label");
+  label.className = "status-field";
+  label.textContent = labelText;
+
+  const select = document.createElement("select");
+  select.name = name;
+  select.required = true;
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Seleccionar...";
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  select.appendChild(placeholder);
+
+  options.forEach((option, index) => {
+    const item = document.createElement("option");
+    item.value = String(index);
+    item.textContent = optionLabel(option);
+    select.appendChild(item);
+  });
+
+  label.appendChild(select);
+  return label;
 }
 
 function createInputField(name, labelText, placeholder, required) {
@@ -469,7 +511,8 @@ function submitTransition(issueId, option, values) {
     comment: values.comment || "",
     worklogTimeSpent: values.worklogTimeSpent || "",
     worklogComment: values.worklogComment || "",
-    textFields: values.textFields || {}
+    textFields: values.textFields || {},
+    selectFields: values.selectFields || {}
   });
 }
 
@@ -642,6 +685,10 @@ function unreadTitle(issue) {
 
 function formatDate(value) {
   return new Date(value).toLocaleString();
+}
+
+function optionLabel(option) {
+  return option?.name || option?.value || option?.id || "Opcion";
 }
 
 function escapeHtml(value) {

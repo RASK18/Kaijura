@@ -22,6 +22,7 @@ public sealed class JiraTransitionAnalyzer
         var requiresComment = false;
         var requiresWorklog = false;
         var requiredTextFields = new List<JiraTransitionTextField>();
+        var requiredSelectFields = new List<JiraTransitionSelectField>();
 
         foreach (var field in requiredFields)
         {
@@ -34,6 +35,12 @@ public sealed class JiraTransitionAnalyzer
             if (IsWorklogField(field) && SupportsOperation(field, "add"))
             {
                 requiresWorklog = true;
+                continue;
+            }
+
+            if (IsSingleSelectField(field) && SupportsOperation(field, "set"))
+            {
+                requiredSelectFields.Add(new JiraTransitionSelectField(field.Id, FieldLabel(field), field.AllowedValues));
                 continue;
             }
 
@@ -51,7 +58,11 @@ public sealed class JiraTransitionAnalyzer
             ? string.Empty
             : $"Jira exige campos no soportados: {string.Join(", ", unsupported)}.";
         var isEnabled = unsupported.Count == 0;
-        var requiresForm = isEnabled && (requiresComment || requiresWorklog || requiredTextFields.Count > 0);
+        var requiresForm = isEnabled && (
+            requiresComment
+            || requiresWorklog
+            || requiredTextFields.Count > 0
+            || requiredSelectFields.Count > 0);
 
         return new JiraTransitionOption(
             transition.Id,
@@ -63,7 +74,8 @@ public sealed class JiraTransitionAnalyzer
             requiresForm,
             requiresComment,
             requiresWorklog,
-            requiredTextFields);
+            requiredTextFields,
+            requiredSelectFields);
     }
 
     private static string LabelFor(JiraTransition transition, bool hasDuplicateStatus)
@@ -105,6 +117,12 @@ public sealed class JiraTransitionAnalyzer
         return EqualsAny(field.SchemaType, "string", "text", "textarea")
             || field.SchemaType.Contains("string", StringComparison.OrdinalIgnoreCase)
             || field.SchemaType.Contains("text", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSingleSelectField(JiraTransitionField field)
+    {
+        return field.AllowedValues.Count > 0
+            && !EqualsAny(field.SchemaType, "array");
     }
 
     private static bool SupportsOperation(JiraTransitionField field, string operation)

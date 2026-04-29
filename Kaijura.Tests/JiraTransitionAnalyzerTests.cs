@@ -12,8 +12,9 @@ public sealed class JiraTransitionAnalyzerTests
         [
             Transition("11", "Start Progress", "In Progress"),
             Transition("21", "Resolve", "Done", Field("comment", "Comment", "comment", "comment", "", "add")),
-            Transition("31", "Close", "Closed", Field("resolution", "Resolution", "resolution", "resolution", "", "set")),
-            Transition("41", "Force Close", "Closed")
+            Transition("31", "Close", "Closed", SelectField("resolution", "Resolucion", "resolution", "resolution", "10000", "Solucionada")),
+            Transition("41", "Force Close", "Closed"),
+            Transition("51", "Escalate", "Escalated", Field("attachment", "Adjunto", "attachment", "attachment", "", "set"))
         ]);
 
         var direct = Assert.Single(options, option => option.Id == "11");
@@ -27,10 +28,18 @@ public sealed class JiraTransitionAnalyzerTests
         Assert.True(withComment.RequiresComment);
         Assert.Equal("Done", withComment.Label);
 
-        var unsupported = Assert.Single(options, option => option.Id == "31");
+        var withSelect = Assert.Single(options, option => option.Id == "31");
+        Assert.True(withSelect.IsEnabled);
+        Assert.True(withSelect.RequiresForm);
+        var selectField = Assert.Single(withSelect.RequiredSelectFields);
+        Assert.Equal("resolution", selectField.Id);
+        Assert.Equal("Resolucion", selectField.Name);
+        Assert.Equal("Solucionada", Assert.Single(selectField.Options).Name);
+        Assert.Equal("Closed (Close)", withSelect.Label);
+
+        var unsupported = Assert.Single(options, option => option.Id == "51");
         Assert.False(unsupported.IsEnabled);
-        Assert.Contains("Resolution", unsupported.DisabledReason);
-        Assert.Equal("Closed (Close)", unsupported.Label);
+        Assert.Contains("Adjunto", unsupported.DisabledReason);
 
         var duplicate = Assert.Single(options, option => option.Id == "41");
         Assert.Equal("Closed (Force Close)", duplicate.Label);
@@ -82,5 +91,19 @@ public sealed class JiraTransitionAnalyzerTests
         params string[] operations)
     {
         return new JiraTransitionField(id, name, Required: true, schemaType, schemaSystem, schemaItems, operations);
+    }
+
+    private static JiraTransitionField SelectField(
+        string id,
+        string name,
+        string schemaType,
+        string schemaSystem,
+        string optionId,
+        string optionName)
+    {
+        return new JiraTransitionField(id, name, Required: true, schemaType, schemaSystem, string.Empty, ["set"])
+        {
+            AllowedValues = [new JiraTransitionAllowedValue(optionId, optionName, string.Empty)]
+        };
     }
 }

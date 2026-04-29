@@ -294,6 +294,16 @@ public sealed class JiraClient : IJiraCommentReader
                     .Where(operation => !string.IsNullOrWhiteSpace(operation))
                     .ToList()
                 : new List<string>();
+        var allowedValues = rawField.TryGetProperty("allowedValues", out var rawAllowedValues)
+            && rawAllowedValues.ValueKind == JsonValueKind.Array
+                ? rawAllowedValues
+                    .EnumerateArray()
+                    .Select(ParseAllowedValue)
+                    .Where(value => !string.IsNullOrWhiteSpace(value.Id)
+                        || !string.IsNullOrWhiteSpace(value.Name)
+                        || !string.IsNullOrWhiteSpace(value.Value))
+                    .ToList()
+                : new List<JiraTransitionAllowedValue>();
 
         return new JiraTransitionField(
             id,
@@ -302,7 +312,24 @@ public sealed class JiraClient : IJiraCommentReader
             GetString(schema, "type"),
             GetString(schema, "system"),
             GetString(schema, "items"),
-            operations);
+            operations)
+        {
+            AllowedValues = allowedValues
+        };
+    }
+
+    private static JiraTransitionAllowedValue ParseAllowedValue(JsonElement rawValue)
+    {
+        if (rawValue.ValueKind == JsonValueKind.String)
+        {
+            var value = rawValue.GetString() ?? string.Empty;
+            return new JiraTransitionAllowedValue(string.Empty, value, value);
+        }
+
+        return new JiraTransitionAllowedValue(
+            GetString(rawValue, "id"),
+            FirstNonEmpty(GetString(rawValue, "name"), GetString(rawValue, "value")),
+            GetString(rawValue, "value"));
     }
 
     private static Dictionary<string, object> BuildTransitionPayload(JiraTransitionUpdate transitionUpdate)
@@ -326,6 +353,20 @@ public sealed class JiraClient : IJiraCommentReader
             }
 
             fields[field.Key] = field.Value.Trim();
+        }
+
+        foreach (var field in transitionUpdate.SelectFields)
+        {
+            if (string.IsNullOrWhiteSpace(field.Key))
+            {
+                continue;
+            }
+
+            var selected = BuildSelectedValuePayload(field.Value);
+            if (selected.Count > 0)
+            {
+                fields[field.Key] = selected;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(transitionUpdate.Comment))
@@ -383,6 +424,26 @@ public sealed class JiraClient : IJiraCommentReader
             + value.ToString("zzz", CultureInfo.InvariantCulture).Replace(":", string.Empty);
     }
 
+    private static Dictionary<string, string> BuildSelectedValuePayload(JiraTransitionAllowedValue value)
+    {
+        if (!string.IsNullOrWhiteSpace(value.Id))
+        {
+            return new Dictionary<string, string> { ["id"] = value.Id.Trim() };
+        }
+
+        if (!string.IsNullOrWhiteSpace(value.Value))
+        {
+            return new Dictionary<string, string> { ["value"] = value.Value.Trim() };
+        }
+
+        if (!string.IsNullOrWhiteSpace(value.Name))
+        {
+            return new Dictionary<string, string> { ["name"] = value.Name.Trim() };
+        }
+
+        return [];
+    }
+
     private static JiraComment ParseComment(JsonElement rawComment)
     {
         var author = rawComment.TryGetProperty("author", out var authorElement)
@@ -431,6 +492,11 @@ public sealed class JiraClient : IJiraCommentReader
         }
 
         return property.GetString() ?? string.Empty;
+    }
+
+    private static string FirstNonEmpty(params string[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 
     private static DateTimeOffset? TryParseDate(string value)

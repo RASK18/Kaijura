@@ -13,11 +13,24 @@ public sealed record JiraTransitionField(
     string SchemaType,
     string SchemaSystem,
     string SchemaItems,
-    IReadOnlyList<string> Operations);
+    IReadOnlyList<string> Operations)
+{
+    public IReadOnlyList<JiraTransitionAllowedValue> AllowedValues { get; init; } = [];
+}
+
+public sealed record JiraTransitionAllowedValue(
+    string Id,
+    string Name,
+    string Value);
 
 public sealed record JiraTransitionTextField(
     string Id,
     string Name);
+
+public sealed record JiraTransitionSelectField(
+    string Id,
+    string Name,
+    IReadOnlyList<JiraTransitionAllowedValue> Options);
 
 public sealed record JiraTransitionOption(
     string Id,
@@ -29,7 +42,8 @@ public sealed record JiraTransitionOption(
     bool RequiresForm,
     bool RequiresComment,
     bool RequiresWorklog,
-    IReadOnlyList<JiraTransitionTextField> RequiredTextFields);
+    IReadOnlyList<JiraTransitionTextField> RequiredTextFields,
+    IReadOnlyList<JiraTransitionSelectField> RequiredSelectFields);
 
 public sealed record JiraTransitionUpdate(
     string TransitionId,
@@ -37,4 +51,5 @@ public sealed record JiraTransitionUpdate(
     string WorklogTimeSpent,
     string WorklogComment,
     DateTimeOffset? WorklogStartedAt,
-    IReadOnlyDictionary<string, string> TextFields);
+    IReadOnlyDictionary<string, string> TextFields,
+    IReadOnlyDictionary<string, JiraTransitionAllowedValue> SelectFields);

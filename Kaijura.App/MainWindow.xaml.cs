@@ -519,7 +519,8 @@ public partial class MainWindow : Window
                 request.WorklogTimeSpent ?? string.Empty,
                 request.WorklogComment ?? string.Empty,
                 string.IsNullOrWhiteSpace(request.WorklogTimeSpent) ? null : DateTimeOffset.Now,
-                request.TextFields ?? new Dictionary<string, string>());
+                request.TextFields ?? new Dictionary<string, string>(),
+                request.SelectFields ?? new Dictionary<string, JiraTransitionAllowedValue>());
 
             await _jiraClient.TransitionIssueAsync(_state.Config, token, issue.JiraId, transitionUpdate, _shutdown.Token);
             var updatedIssue = await _jiraClient.GetIssueAsync(_state.Config, token, issue.JiraId, _shutdown.Token);
@@ -866,5 +867,6 @@ public partial class MainWindow : Window
         string? Comment,
         string? WorklogTimeSpent,
         string? WorklogComment,
-        Dictionary<string, string>? TextFields);
+        Dictionary<string, string>? TextFields,
+        Dictionary<string, JiraTransitionAllowedValue>? SelectFields);
 }

@@ -29,7 +29,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -309,6 +310,11 @@ button {
   padding: 0 8px;
 }
 
+.status-field select {
+  height: 30px;
+  padding: 0 8px;
+}
+
 .status-field textarea {
   min-height: 64px;
   padding: 8px;
@@ -432,7 +438,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -446,6 +453,11 @@ input {
   padding: 0 10px;
 }
 
+select {
+  height: 36px;
+  padding: 0 8px;
+}
+
 textarea {
   min-height: 112px;
   resize: vertical;
@@ -453,7 +465,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: var(--primary);
 }
 

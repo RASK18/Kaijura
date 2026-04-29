@@ -99,6 +99,16 @@ public sealed class JiraClientTests
                       "name": "Block Comment",
                       "operations": ["set"],
                       "schema": { "type": "string", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:textarea" }
+                    },
+                    "resolution": {
+                      "required": true,
+                      "name": "Resolucion",
+                      "operations": ["set"],
+                      "schema": { "type": "resolution", "system": "resolution" },
+                      "allowedValues": [
+                        { "id": "10000", "name": "Solucionada" },
+                        { "id": "10001", "name": "No solucionada" }
+                      ]
                     }
                   }
                 }
@@ -128,6 +138,21 @@ public sealed class JiraClientTests
         var textField = Assert.Single(transition.Fields, field => field.Id == "customfield_12345");
         Assert.Equal("Block Comment", textField.Name);
         Assert.Equal("string", textField.SchemaType);
+
+        var resolution = Assert.Single(transition.Fields, field => field.Id == "resolution");
+        Assert.Equal("resolution", resolution.SchemaSystem);
+        Assert.Collection(
+            resolution.AllowedValues,
+            value =>
+            {
+                Assert.Equal("10000", value.Id);
+                Assert.Equal("Solucionada", value.Name);
+            },
+            value =>
+            {
+                Assert.Equal("10001", value.Id);
+                Assert.Equal("No solucionada", value.Name);
+            });
     }
 
     [Fact]
@@ -151,6 +176,10 @@ public sealed class JiraClientTests
                 new Dictionary<string, string>
                 {
                     ["customfield_12345"] = "Blocked by provider"
+                },
+                new Dictionary<string, JiraTransitionAllowedValue>
+                {
+                    ["resolution"] = new("10000", "Solucionada", string.Empty)
                 }),
             CancellationToken.None);
 
@@ -162,6 +191,7 @@ public sealed class JiraClientTests
         var root = document.RootElement;
         Assert.Equal("31", root.GetProperty("transition").GetProperty("id").GetString());
         Assert.Equal("Blocked by provider", root.GetProperty("fields").GetProperty("customfield_12345").GetString());
+        Assert.Equal("10000", root.GetProperty("fields").GetProperty("resolution").GetProperty("id").GetString());
 
         var comment = root.GetProperty("update").GetProperty("comment").EnumerateArray().Single().GetProperty("add");
         Assert.Equal("Ready to resolve", comment.GetProperty("body").GetString());
