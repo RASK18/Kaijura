@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using Kaijura.App.Models;
 using Kaijura.App.Services;
@@ -42,9 +44,88 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        StateChanged += OnWindowStateChanged;
         Loaded += OnLoaded;
         Closed += (_, _) => _shutdown.Cancel();
         _refreshTimer.Tick += async (_, _) => await RefreshJiraAsync(isAutoRefresh: true);
+        UpdateMaximizeButtonState();
+        UpdateNavigationButtonState();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        UpdateMaximizeButtonState();
+    }
+
+    private void OnMinimizeButtonClick(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.MinimizeWindow(this);
+    }
+
+    private void OnMaximizeButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+            return;
+        }
+
+        SystemCommands.MaximizeWindow(this);
+    }
+
+    private void OnCloseButtonClick(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.CloseWindow(this);
+    }
+
+    private void OnNavigationButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton { Tag: string view })
+        {
+            SetActiveView(view);
+        }
+    }
+
+    private void UpdateMaximizeButtonState()
+    {
+        var isMaximized = WindowState == WindowState.Maximized;
+        var actionName = isMaximized ? "Restaurar" : "Maximizar";
+
+        MaximizeButton.Content = isMaximized ? "\uE923" : "\uE922";
+        MaximizeButton.ToolTip = actionName;
+        AutomationProperties.SetName(MaximizeButton, actionName);
+    }
+
+    private void SetActiveView(string view)
+    {
+        if (!IsKnownView(view))
+        {
+            view = "board";
+        }
+
+        _activeView = view;
+        SendState();
+    }
+
+    private static bool IsKnownView(string view)
+    {
+        return view is "board" or "archive" or "missing" or "settings";
+    }
+
+    private void UpdateNavigationButtonState()
+    {
+        ToggleButton[] buttons =
+        [
+            BoardNavigationButton,
+            ArchiveNavigationButton,
+            MissingNavigationButton,
+            SettingsNavigationButton
+        ];
+
+        foreach (var button in buttons)
+        {
+            button.IsChecked = string.Equals(button.Tag as string, _activeView, StringComparison.Ordinal);
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -140,8 +221,7 @@ public partial class MainWindow : Window
                     OpenIssue(payload);
                     break;
                 case "setView":
-                    _activeView = payload.GetProperty("view").GetString() ?? "board";
-                    SendState();
+                    SetActiveView(payload.GetProperty("view").GetString() ?? "board");
                     break;
                 case "installUpdate":
                     await InstallUpdateAsync();
@@ -379,6 +459,8 @@ public partial class MainWindow : Window
 
     private void SendState()
     {
+        UpdateNavigationButtonState();
+
         if (!_webReady || Browser.CoreWebView2 is null)
         {
             return;

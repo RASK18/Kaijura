@@ -21,8 +21,6 @@ const titles = {
   settings: "Configuracion"
 };
 
-const sidebarStorageKey = "kaijura.sidebarCollapsed";
-
 window.chrome.webview.addEventListener("message", event => {
   if (!event.data || event.data.type !== "state") {
     return;
@@ -33,41 +31,17 @@ window.chrome.webview.addEventListener("message", event => {
 });
 
 window.addEventListener("DOMContentLoaded", () => {
-  setSidebarCollapsed(localStorage.getItem(sidebarStorageKey) === "true", false);
   bindChrome();
   post("ready");
 });
 
 function bindChrome() {
-  document.querySelectorAll(".nav-item").forEach(button => {
-    button.addEventListener("click", () => post("setView", { view: button.dataset.view }));
-  });
-
   document.getElementById("refreshButton").addEventListener("click", () => post("refresh"));
   document.getElementById("installUpdateButton").addEventListener("click", () => post("installUpdate"));
-  document.getElementById("sidebarToggle").addEventListener("click", () => {
-    const shell = document.querySelector(".app-shell");
-    setSidebarCollapsed(!shell.classList.contains("sidebar-collapsed"), true);
-  });
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
     saveSettings();
   });
-}
-
-function setSidebarCollapsed(isCollapsed, shouldPersist) {
-  const shell = document.querySelector(".app-shell");
-  const toggle = document.getElementById("sidebarToggle");
-
-  shell.classList.toggle("sidebar-collapsed", isCollapsed);
-  toggle.textContent = isCollapsed ? ">>" : "<<";
-  toggle.setAttribute("aria-expanded", String(!isCollapsed));
-  toggle.setAttribute("aria-label", isCollapsed ? "Expandir menu" : "Contraer menu");
-  toggle.title = isCollapsed ? "Expandir menu" : "Contraer menu";
-
-  if (shouldPersist) {
-    localStorage.setItem(sidebarStorageKey, String(isCollapsed));
-  }
 }
 
 function render() {
@@ -81,9 +55,6 @@ function render() {
 function renderChrome() {
   const activeView = state.activeView || "settings";
   Object.entries(views).forEach(([name, element]) => element.classList.toggle("hidden", name !== activeView));
-  document.querySelectorAll(".nav-item").forEach(button => {
-    button.classList.toggle("active", button.dataset.view === activeView);
-  });
 
   document.getElementById("viewTitle").textContent = titles[activeView] || "Kaijura";
   document.getElementById("statusMessage").textContent = state.connection.message || "";
