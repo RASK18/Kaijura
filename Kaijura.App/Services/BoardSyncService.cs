@@ -112,6 +112,19 @@ public sealed class BoardSyncService
         return true;
     }
 
+    public bool UpdateIssueFromJira(AppState state, JiraIssue jiraIssue, DateTimeOffset now)
+    {
+        var id = string.IsNullOrWhiteSpace(jiraIssue.Id) ? jiraIssue.Key : jiraIssue.Id;
+        var issue = FindIssue(state, id);
+        if (issue is null)
+        {
+            return false;
+        }
+
+        UpdateFromJira(issue, jiraIssue, state.Config, now);
+        return true;
+    }
+
     private IssueState CreateIssueState(JiraIssue jiraIssue, AppState state, DateTimeOffset now)
     {
         var kind = Classify(jiraIssue.IssueType, state.Config);

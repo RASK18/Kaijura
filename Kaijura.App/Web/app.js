@@ -7,6 +7,16 @@ const state = {
   update: {}
 };
 
+const transitionMenu = {
+  openIssueId: null,
+  loadingIssueId: null,
+  formTransitionId: null,
+  submittingIssueId: null,
+  submittingTransitionId: null,
+  optionsByIssueId: {},
+  errorByIssueId: {}
+};
+
 const views = {
   board: document.getElementById("boardView"),
   archive: document.getElementById("archiveView"),
@@ -15,12 +25,25 @@ const views = {
 };
 
 window.chrome.webview.addEventListener("message", event => {
-  if (!event.data || event.data.type !== "state") {
+  if (!event.data || !event.data.type) {
     return;
   }
 
-  Object.assign(state, event.data.payload);
-  render();
+  switch (event.data.type) {
+    case "state":
+      Object.assign(state, event.data.payload);
+      render();
+      break;
+    case "issueTransitions":
+      receiveTransitions(event.data.payload);
+      break;
+    case "transitionError":
+      receiveTransitionError(event.data.payload);
+      break;
+    case "transitionResult":
+      receiveTransitionResult(event.data.payload);
+      break;
+  }
 });
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -33,6 +56,12 @@ function bindChrome() {
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
     saveSettings();
+  });
+  document.addEventListener("click", closeTransitionMenu);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      closeTransitionMenu();
+    }
   });
 }
 
@@ -156,7 +185,7 @@ function createCard(issue, draggable, action) {
   card.innerHTML = `
     <div class="card-top">
       <button class="issue-key card-action" type="button">${escapeHtml(issue.key)}</button>
-      <span class="issue-status" title="${escapeHtml(issue.jiraStatus || "")}">${escapeHtml(issue.jiraStatus || "Sin estado")}</span>
+      <button class="issue-status" type="button" title="${escapeHtml(issue.jiraStatus || "")}" aria-haspopup="menu" aria-expanded="${transitionMenu.openIssueId === issue.id ? "true" : "false"}">${escapeHtml(issue.jiraStatus || "Sin estado")}</button>
     </div>
     <div class="issue-title">${escapeHtml(issue.summary || "")}</div>
   `;
@@ -177,6 +206,11 @@ function createCard(issue, draggable, action) {
   card.querySelector(".issue-key").addEventListener("click", event => {
     event.stopPropagation();
     post("openIssue", { issueId: issue.id });
+  });
+
+  card.querySelector(".issue-status").addEventListener("click", event => {
+    event.stopPropagation();
+    toggleTransitionMenu(issue.id);
   });
 
   if (draggable) {
@@ -212,7 +246,273 @@ function createCard(issue, draggable, action) {
     card.appendChild(actions);
   }
 
+  if (transitionMenu.openIssueId === issue.id) {
+    card.appendChild(createTransitionMenu(issue));
+  }
+
   return card;
+}
+
+function toggleTransitionMenu(issueId) {
+  if (transitionMenu.openIssueId === issueId) {
+    closeTransitionMenu();
+    return;
+  }
+
+  transitionMenu.openIssueId = issueId;
+  transitionMenu.loadingIssueId = issueId;
+  transitionMenu.formTransitionId = null;
+  transitionMenu.submittingIssueId = null;
+  transitionMenu.submittingTransitionId = null;
+  delete transitionMenu.optionsByIssueId[issueId];
+  delete transitionMenu.errorByIssueId[issueId];
+  render();
+  post("loadTransitions", { issueId });
+}
+
+function closeTransitionMenu() {
+  if (!transitionMenu.openIssueId) {
+    return;
+  }
+
+  transitionMenu.openIssueId = null;
+  transitionMenu.loadingIssueId = null;
+  transitionMenu.formTransitionId = null;
+  transitionMenu.submittingIssueId = null;
+  transitionMenu.submittingTransitionId = null;
+  render();
+}
+
+function createTransitionMenu(issue) {
+  const menu = document.createElement("div");
+  menu.className = "status-menu";
+  menu.setAttribute("role", "menu");
+  menu.addEventListener("click", event => event.stopPropagation());
+
+  const error = transitionMenu.errorByIssueId[issue.id];
+  if (error) {
+    const message = document.createElement("div");
+    message.className = "status-menu-message error";
+    message.textContent = error;
+    menu.appendChild(message);
+  }
+
+  if (transitionMenu.loadingIssueId === issue.id) {
+    const loading = document.createElement("div");
+    loading.className = "status-menu-message";
+    loading.textContent = "Cargando transiciones...";
+    menu.appendChild(loading);
+    return menu;
+  }
+
+  const options = transitionMenu.optionsByIssueId[issue.id];
+  if (!options) {
+    const loading = document.createElement("div");
+    loading.className = "status-menu-message";
+    loading.textContent = "Preparando...";
+    menu.appendChild(loading);
+    return menu;
+  }
+
+  if (options.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "status-menu-message";
+    empty.textContent = "Sin transiciones disponibles";
+    menu.appendChild(empty);
+    return menu;
+  }
+
+  options.forEach(option => {
+    menu.appendChild(createTransitionOption(issue, option));
+
+    if (transitionMenu.formTransitionId === option.id) {
+      menu.appendChild(createTransitionForm(issue, option));
+    }
+  });
+
+  return menu;
+}
+
+function createTransitionOption(issue, option) {
+  if (!option.isEnabled) {
+    const disabled = document.createElement("div");
+    disabled.className = "status-option disabled";
+    disabled.setAttribute("role", "menuitem");
+    disabled.setAttribute("aria-disabled", "true");
+    disabled.title = option.disabledReason || "Transicion no disponible";
+    disabled.textContent = option.label;
+    return disabled;
+  }
+
+  const button = document.createElement("button");
+  button.className = "status-option";
+  button.type = "button";
+  button.setAttribute("role", "menuitem");
+  button.disabled = transitionMenu.submittingIssueId === issue.id;
+  button.textContent = option.label;
+  button.addEventListener("click", () => {
+    if (option.requiresForm) {
+      transitionMenu.formTransitionId = transitionMenu.formTransitionId === option.id ? null : option.id;
+      delete transitionMenu.errorByIssueId[issue.id];
+      render();
+      return;
+    }
+
+    submitTransition(issue.id, option, {});
+  });
+  return button;
+}
+
+function createTransitionForm(issue, option) {
+  const form = document.createElement("form");
+  form.className = "status-form";
+
+  if (option.requiresComment) {
+    form.appendChild(createTextareaField("comment", "Comentario", true));
+  }
+
+  if (option.requiresWorklog) {
+    form.appendChild(createInputField("worklogTimeSpent", "Tiempo", "30m, 1h", true));
+    form.appendChild(createTextareaField("worklogComment", "Comentario de trabajo", false));
+  }
+
+  const textFields = option.requiredTextFields || [];
+  textFields.forEach((field, index) => {
+    form.appendChild(createTextareaField(textFieldControlName(index), field.name || field.id, true));
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "status-form-actions";
+
+  const submit = document.createElement("button");
+  submit.className = "status-form-submit";
+  submit.type = "submit";
+  submit.disabled = transitionMenu.submittingIssueId === issue.id;
+  submit.textContent = transitionMenu.submittingTransitionId === option.id ? "Cambiando..." : "Cambiar";
+
+  const cancel = document.createElement("button");
+  cancel.className = "status-form-cancel";
+  cancel.type = "button";
+  cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", () => {
+    transitionMenu.formTransitionId = null;
+    delete transitionMenu.errorByIssueId[issue.id];
+    render();
+  });
+
+  actions.appendChild(cancel);
+  actions.appendChild(submit);
+  form.appendChild(actions);
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    if (!form.reportValidity()) {
+      return;
+    }
+
+    const submittedTextFields = {};
+    textFields.forEach((field, index) => {
+      submittedTextFields[field.id] = form.elements[textFieldControlName(index)]?.value || "";
+    });
+
+    submitTransition(issue.id, option, {
+      comment: form.elements.comment?.value || "",
+      worklogTimeSpent: form.elements.worklogTimeSpent?.value || "",
+      worklogComment: form.elements.worklogComment?.value || "",
+      textFields: submittedTextFields
+    });
+  });
+
+  return form;
+}
+
+function createTextareaField(name, labelText, required) {
+  const label = document.createElement("label");
+  label.className = "status-field";
+  label.textContent = labelText;
+
+  const textarea = document.createElement("textarea");
+  textarea.name = name;
+  textarea.required = required;
+  textarea.rows = 3;
+  label.appendChild(textarea);
+  return label;
+}
+
+function textFieldControlName(index) {
+  return `textField${index}`;
+}
+
+function createInputField(name, labelText, placeholder, required) {
+  const label = document.createElement("label");
+  label.className = "status-field";
+  label.textContent = labelText;
+
+  const input = document.createElement("input");
+  input.name = name;
+  input.placeholder = placeholder;
+  input.required = required;
+  input.autocomplete = "off";
+  label.appendChild(input);
+  return label;
+}
+
+function submitTransition(issueId, option, values) {
+  transitionMenu.submittingIssueId = issueId;
+  transitionMenu.submittingTransitionId = option.id;
+  delete transitionMenu.errorByIssueId[issueId];
+  render();
+
+  post("changeIssueStatus", {
+    issueId,
+    transitionId: option.id,
+    comment: values.comment || "",
+    worklogTimeSpent: values.worklogTimeSpent || "",
+    worklogComment: values.worklogComment || "",
+    textFields: values.textFields || {}
+  });
+}
+
+function receiveTransitions(payload) {
+  if (!payload || !payload.issueId) {
+    return;
+  }
+
+  transitionMenu.loadingIssueId = null;
+  transitionMenu.optionsByIssueId[payload.issueId] = payload.transitions || [];
+  delete transitionMenu.errorByIssueId[payload.issueId];
+  render();
+}
+
+function receiveTransitionError(payload) {
+  if (!payload || !payload.issueId) {
+    return;
+  }
+
+  transitionMenu.loadingIssueId = null;
+  transitionMenu.submittingIssueId = null;
+  transitionMenu.submittingTransitionId = null;
+  transitionMenu.errorByIssueId[payload.issueId] = payload.message || "Accion no completada";
+  render();
+}
+
+function receiveTransitionResult(payload) {
+  if (!payload || !payload.issueId) {
+    return;
+  }
+
+  delete transitionMenu.optionsByIssueId[payload.issueId];
+  delete transitionMenu.errorByIssueId[payload.issueId];
+
+  if (transitionMenu.openIssueId === payload.issueId) {
+    transitionMenu.openIssueId = null;
+    transitionMenu.formTransitionId = null;
+  }
+
+  transitionMenu.loadingIssueId = null;
+  transitionMenu.submittingIssueId = null;
+  transitionMenu.submittingTransitionId = null;
+  render();
 }
 
 function bindDropList(list) {

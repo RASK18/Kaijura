@@ -71,6 +71,33 @@ public sealed class BoardSyncServiceTests
         Assert.Equal(IssueKind.Unmapped, state.Issues[0].Kind);
     }
 
+    [Fact]
+    public void UpdateIssueFromJiraRefreshesStatusWithoutMovingCard()
+    {
+        var state = CreateState();
+        var service = new BoardSyncService();
+        service.Sync(state, Search(Issue("10001", "BTR-1802", "Task")), DateTimeOffset.Parse("2026-04-28T10:00:00Z"));
+        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.Dev, ["10001"]);
+
+        var changed = service.UpdateIssueFromJira(
+            state,
+            new JiraIssue(
+                "10001",
+                "BTR-1802",
+                "Updated summary",
+                "Resolved",
+                "Task",
+                "https://jira.example.local/browse/BTR-1802",
+                DateTimeOffset.Parse("2026-04-28T10:20:00Z")),
+            DateTimeOffset.Parse("2026-04-28T10:21:00Z"));
+
+        Assert.True(changed);
+        Assert.Equal("Resolved", state.Issues[0].JiraStatus);
+        Assert.Equal("Updated summary", state.Issues[0].Summary);
+        Assert.Equal(BoardSection.Board, state.Issues[0].Section);
+        Assert.Equal(BoardColumn.Dev, state.Issues[0].Column);
+    }
+
     private static AppState CreateState()
     {
         return new AppState

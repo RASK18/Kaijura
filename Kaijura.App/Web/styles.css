@@ -215,14 +215,135 @@ button {
   padding: 2px 6px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: #151518;
   color: var(--muted);
+  cursor: pointer;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.issue-status:hover {
+  color: var(--text);
+  border-color: #43434a;
+}
+
+.issue-status:focus-visible,
+.status-option:focus-visible,
+.status-form-submit:focus-visible,
+.status-form-cancel:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .issue-title {
   overflow-wrap: anywhere;
   line-height: 1.35;
+}
+
+.status-menu {
+  position: absolute;
+  top: 36px;
+  right: 8px;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  width: min(288px, calc(100% - 16px));
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #18181c;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+.status-menu-message {
+  padding: 8px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.status-menu-message.error {
+  color: #ffb0ba;
+}
+
+.status-option {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.status-option:hover {
+  background: var(--surface-2);
+}
+
+.status-option.disabled {
+  display: flex;
+  align-items: center;
+  color: var(--quiet);
+  cursor: default;
+}
+
+.status-form {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 6px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #151518;
+}
+
+.status-field {
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-field input {
+  height: 30px;
+  padding: 0 8px;
+}
+
+.status-field textarea {
+  min-height: 64px;
+  padding: 8px;
+}
+
+.status-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.status-form-submit,
+.status-form-cancel {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.status-form-submit {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #071b17;
+  font-weight: 700;
+}
+
+.status-form-cancel {
+  background: #202027;
+  color: var(--muted);
+}
+
+.status-form-submit:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .card-actions {

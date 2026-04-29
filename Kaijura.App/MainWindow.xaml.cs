@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private readonly ISecretProtector _secretProtector = new DpapiSecretProtector();
     private readonly JiraClient _jiraClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
     private readonly BoardSyncService _syncService = new();
+    private readonly JiraTransitionAnalyzer _transitionAnalyzer = new();
     private readonly CommentSyncService _commentSyncService = new();
     private readonly UpdateService _updateService = new();
     private readonly DispatcherTimer _refreshTimer = new();
@@ -274,6 +275,12 @@ public partial class MainWindow : Window
                 case "openIssue":
                     OpenIssue(payload);
                     break;
+                case "loadTransitions":
+                    await LoadTransitionsAsync(payload);
+                    break;
+                case "changeIssueStatus":
+                    await ChangeIssueStatusAsync(payload);
+                    break;
                 case "setView":
                     SetActiveView(payload.GetProperty("view").GetString() ?? "board");
                     break;
@@ -459,6 +466,89 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task LoadTransitionsAsync(JsonElement payload)
+    {
+        var issueId = payload.TryGetProperty("issueId", out var issueIdElement)
+            ? issueIdElement.GetString() ?? string.Empty
+            : string.Empty;
+
+        try
+        {
+            var issue = FindIssue(issueId)
+                ?? throw new InvalidOperationException("No se encontro el ticket en Kaijura.");
+            var token = _secretProtector.Unprotect(_state.Config.EncryptedToken);
+            var transitions = await _jiraClient.GetTransitionsAsync(_state.Config, token, issue.JiraId, _shutdown.Token);
+            var options = _transitionAnalyzer.BuildOptions(transitions);
+
+            SendWebMessage("issueTransitions", new
+            {
+                issueId = issue.JiraId,
+                transitions = options
+            });
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SendTransitionError(issueId, $"No se pudieron cargar transiciones: {FriendlyJiraError(ex)}");
+        }
+    }
+
+    private async Task ChangeIssueStatusAsync(JsonElement payload)
+    {
+        var issueId = payload.TryGetProperty("issueId", out var issueIdElement)
+            ? issueIdElement.GetString() ?? string.Empty
+            : string.Empty;
+        var lockTaken = false;
+
+        try
+        {
+            var request = payload.Deserialize<ChangeIssueStatusPayload>(JsonOptions)
+                ?? throw new InvalidOperationException("Cambio de estado vacio.");
+
+            await _refreshLock.WaitAsync(_shutdown.Token);
+            lockTaken = true;
+
+            var issue = FindIssue(request.IssueId)
+                ?? throw new InvalidOperationException("No se encontro el ticket en Kaijura.");
+            var token = _secretProtector.Unprotect(_state.Config.EncryptedToken);
+            var transitionUpdate = new JiraTransitionUpdate(
+                request.TransitionId,
+                request.Comment ?? string.Empty,
+                request.WorklogTimeSpent ?? string.Empty,
+                request.WorklogComment ?? string.Empty,
+                string.IsNullOrWhiteSpace(request.WorklogTimeSpent) ? null : DateTimeOffset.Now,
+                request.TextFields ?? new Dictionary<string, string>());
+
+            await _jiraClient.TransitionIssueAsync(_state.Config, token, issue.JiraId, transitionUpdate, _shutdown.Token);
+            var updatedIssue = await _jiraClient.GetIssueAsync(_state.Config, token, issue.JiraId, _shutdown.Token);
+            _syncService.UpdateIssueFromJira(_state, updatedIssue, DateTimeOffset.Now);
+            await _store.SaveAsync(_state, _shutdown.Token);
+
+            SendState();
+            SendWebMessage("transitionResult", new
+            {
+                issueId = issue.JiraId,
+                jiraStatus = updatedIssue.JiraStatus
+            });
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SendTransitionError(issueId, $"No se pudo cambiar el estado: {FriendlyJiraError(ex)}");
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _refreshLock.Release();
+            }
+        }
+    }
+
     private async Task CheckForUpdatesAsync()
     {
         var status = await _updateService.CheckAsync(_state.Config.UpdateRepositoryUrl, _shutdown.Token);
@@ -498,6 +588,13 @@ public partial class MainWindow : Window
         }
     }
 
+    private IssueState? FindIssue(string issueId)
+    {
+        return _state.Issues.FirstOrDefault(issue =>
+            string.Equals(issue.JiraId, issueId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(issue.Key, issueId, StringComparison.OrdinalIgnoreCase));
+    }
+
     private ConnectionState CreateInitialConnection()
     {
         var configured = _state.Config.IsReadyForJira;
@@ -516,6 +613,20 @@ public partial class MainWindow : Window
         UpdateNavigationButtonState();
         UpdateTitlebarStatus();
 
+        SendWebMessage("state", BuildUiState());
+    }
+
+    private void SendTransitionError(string issueId, string message)
+    {
+        SendWebMessage("transitionError", new
+        {
+            issueId,
+            message
+        });
+    }
+
+    private void SendWebMessage(string type, object payload)
+    {
         if (!_webReady || Browser.CoreWebView2 is null)
         {
             return;
@@ -523,8 +634,8 @@ public partial class MainWindow : Window
 
         var message = new
         {
-            type = "state",
-            payload = BuildUiState()
+            type,
+            payload
         };
 
         Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message, JsonOptions));
@@ -748,4 +859,12 @@ public partial class MainWindow : Window
         string Section,
         string Column,
         string[] OrderedIssueIds);
+
+    private sealed record ChangeIssueStatusPayload(
+        string IssueId,
+        string TransitionId,
+        string? Comment,
+        string? WorklogTimeSpent,
+        string? WorklogComment,
+        Dictionary<string, string>? TextFields);
 }

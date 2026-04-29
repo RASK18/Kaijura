@@ -85,6 +85,71 @@ public sealed class JiraClient : IJiraCommentReader
         return new JiraSearchResult(issues, total, total > issues.Count);
     }
 
+    public async Task<JiraIssue> GetIssueAsync(
+        AppConfig config,
+        string token,
+        string issueIdOrKey,
+        CancellationToken cancellationToken)
+    {
+        var path = $"rest/api/2/issue/{Uri.EscapeDataString(issueIdOrKey)}?fields=summary,status,issuetype,updated";
+        using var request = CreateRequest(HttpMethod.Get, BuildUri(config.JiraHost, path), token);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await CreateExceptionAsync(response, $"No se pudo recargar el ticket {issueIdOrKey}.", cancellationToken);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ParseIssue(config.JiraHost, document.RootElement);
+    }
+
+    public async Task<IReadOnlyList<JiraTransition>> GetTransitionsAsync(
+        AppConfig config,
+        string token,
+        string issueIdOrKey,
+        CancellationToken cancellationToken)
+    {
+        var path = $"rest/api/2/issue/{Uri.EscapeDataString(issueIdOrKey)}/transitions?expand=transitions.fields";
+        using var request = CreateRequest(HttpMethod.Get, BuildUri(config.JiraHost, path), token);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await CreateExceptionAsync(response, $"No se pudieron leer transiciones de {issueIdOrKey}.", cancellationToken);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (!document.RootElement.TryGetProperty("transitions", out var rawTransitions)
+            || rawTransitions.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return rawTransitions.EnumerateArray().Select(ParseTransition).ToList();
+    }
+
+    public async Task TransitionIssueAsync(
+        AppConfig config,
+        string token,
+        string issueIdOrKey,
+        JiraTransitionUpdate transitionUpdate,
+        CancellationToken cancellationToken)
+    {
+        var payload = BuildTransitionPayload(transitionUpdate);
+        var path = $"rest/api/2/issue/{Uri.EscapeDataString(issueIdOrKey)}/transitions";
+        using var request = CreateRequest(HttpMethod.Post, BuildUri(config.JiraHost, path), token);
+        request.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await CreateExceptionAsync(response, $"No se pudo cambiar el estado de {issueIdOrKey}.", cancellationToken);
+        }
+    }
+
     public async Task<JiraComment?> GetLatestRelevantCommentAsync(
         AppConfig config,
         string token,
@@ -192,6 +257,130 @@ public sealed class JiraClient : IJiraCommentReader
         var browseUrl = $"{NormalizeHost(jiraHost)}/browse/{Uri.EscapeDataString(key)}";
 
         return new JiraIssue(id, key, summary, status, issueType, browseUrl, updated);
+    }
+
+    private static JiraTransition ParseTransition(JsonElement rawTransition)
+    {
+        var to = rawTransition.TryGetProperty("to", out var toElement)
+            ? toElement
+            : default;
+        var fields = new List<JiraTransitionField>();
+
+        if (rawTransition.TryGetProperty("fields", out var rawFields) && rawFields.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var rawField in rawFields.EnumerateObject())
+            {
+                fields.Add(ParseTransitionField(rawField.Name, rawField.Value));
+            }
+        }
+
+        return new JiraTransition(
+            GetString(rawTransition, "id"),
+            GetString(rawTransition, "name"),
+            GetString(to, "name"),
+            fields);
+    }
+
+    private static JiraTransitionField ParseTransitionField(string id, JsonElement rawField)
+    {
+        var schema = rawField.TryGetProperty("schema", out var schemaElement)
+            ? schemaElement
+            : default;
+        var operations = rawField.TryGetProperty("operations", out var rawOperations)
+            && rawOperations.ValueKind == JsonValueKind.Array
+                ? rawOperations
+                    .EnumerateArray()
+                    .Select(operation => operation.GetString() ?? string.Empty)
+                    .Where(operation => !string.IsNullOrWhiteSpace(operation))
+                    .ToList()
+                : new List<string>();
+
+        return new JiraTransitionField(
+            id,
+            GetString(rawField, "name"),
+            rawField.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True,
+            GetString(schema, "type"),
+            GetString(schema, "system"),
+            GetString(schema, "items"),
+            operations);
+    }
+
+    private static Dictionary<string, object> BuildTransitionPayload(JiraTransitionUpdate transitionUpdate)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["transition"] = new Dictionary<string, string>
+            {
+                ["id"] = transitionUpdate.TransitionId
+            }
+        };
+
+        var fields = new Dictionary<string, object>();
+        var updates = new Dictionary<string, object>();
+
+        foreach (var field in transitionUpdate.TextFields)
+        {
+            if (string.IsNullOrWhiteSpace(field.Key) || string.IsNullOrWhiteSpace(field.Value))
+            {
+                continue;
+            }
+
+            fields[field.Key] = field.Value.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(transitionUpdate.Comment))
+        {
+            updates["comment"] = new[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["add"] = new Dictionary<string, string>
+                    {
+                        ["body"] = transitionUpdate.Comment.Trim()
+                    }
+                }
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(transitionUpdate.WorklogTimeSpent))
+        {
+            var worklog = new Dictionary<string, string>
+            {
+                ["timeSpent"] = transitionUpdate.WorklogTimeSpent.Trim(),
+                ["started"] = FormatJiraDate(transitionUpdate.WorklogStartedAt ?? DateTimeOffset.Now)
+            };
+
+            if (!string.IsNullOrWhiteSpace(transitionUpdate.WorklogComment))
+            {
+                worklog["comment"] = transitionUpdate.WorklogComment.Trim();
+            }
+
+            updates["worklog"] = new[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["add"] = worklog
+                }
+            };
+        }
+
+        if (fields.Count > 0)
+        {
+            payload["fields"] = fields;
+        }
+
+        if (updates.Count > 0)
+        {
+            payload["update"] = updates;
+        }
+
+        return payload;
+    }
+
+    private static string FormatJiraDate(DateTimeOffset value)
+    {
+        return value.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture)
+            + value.ToString("zzz", CultureInfo.InvariantCulture).Replace(":", string.Empty);
     }
 
     private static JiraComment ParseComment(JsonElement rawComment)
