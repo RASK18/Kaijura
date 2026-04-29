@@ -7,9 +7,10 @@ using Kaijura.App.Models;
 
 namespace Kaijura.App.Services;
 
-public sealed class JiraClient
+public sealed class JiraClient : IJiraCommentReader
 {
     private const int PageSize = 100;
+    private const int CommentPageSize = 100;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
 
@@ -84,6 +85,56 @@ public sealed class JiraClient
         return new JiraSearchResult(issues, total, total > issues.Count);
     }
 
+    public async Task<JiraComment?> GetLatestRelevantCommentAsync(
+        AppConfig config,
+        string token,
+        string issueIdOrKey,
+        IReadOnlyCollection<string> ignoredAuthors,
+        CancellationToken cancellationToken)
+    {
+        var startAt = 0;
+        var total = 0;
+
+        do
+        {
+            var path = $"rest/api/2/issue/{Uri.EscapeDataString(issueIdOrKey)}/comment";
+            var uri = BuildUri(
+                config.JiraHost,
+                $"{path}?startAt={startAt}&maxResults={CommentPageSize}&orderBy=-created");
+
+            using var request = CreateRequest(HttpMethod.Get, uri, token);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw await CreateExceptionAsync(response, $"No se pudieron leer comentarios de {issueIdOrKey}.", cancellationToken);
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = document.RootElement;
+            total = root.TryGetProperty("total", out var totalElement) ? totalElement.GetInt32() : 0;
+
+            if (!root.TryGetProperty("comments", out var comments))
+            {
+                return null;
+            }
+
+            foreach (var rawComment in comments.EnumerateArray())
+            {
+                var comment = ParseComment(rawComment);
+                if (!IsIgnoredAuthor(comment, ignoredAuthors))
+                {
+                    return comment;
+                }
+            }
+
+            startAt += comments.GetArrayLength();
+        }
+        while (startAt < total);
+
+        return null;
+    }
+
     public static string NormalizeHost(string host)
     {
         var normalized = host.Trim();
@@ -143,8 +194,48 @@ public sealed class JiraClient
         return new JiraIssue(id, key, summary, status, issueType, browseUrl, updated);
     }
 
+    private static JiraComment ParseComment(JsonElement rawComment)
+    {
+        var author = rawComment.TryGetProperty("author", out var authorElement)
+            ? authorElement
+            : default;
+
+        return new JiraComment(
+            GetString(rawComment, "id"),
+            GetString(author, "name"),
+            GetString(author, "key"),
+            GetString(author, "displayName"),
+            GetString(author, "emailAddress"),
+            TryParseDate(GetString(rawComment, "created")),
+            TryParseDate(GetString(rawComment, "updated")));
+    }
+
+    private static bool IsIgnoredAuthor(JiraComment comment, IReadOnlyCollection<string> ignoredAuthors)
+    {
+        if (ignoredAuthors.Count == 0)
+        {
+            return false;
+        }
+
+        var authorValues = new[]
+        {
+            comment.AuthorName,
+            comment.AuthorKey,
+            comment.AuthorDisplayName,
+            comment.AuthorEmailAddress
+        };
+
+        return ignoredAuthors.Any(ignored => authorValues.Any(author =>
+            string.Equals(author.Trim(), ignored.Trim(), StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static string GetString(JsonElement element, string propertyName)
     {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
         if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
         {
             return string.Empty;

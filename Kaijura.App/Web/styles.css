@@ -244,10 +244,11 @@ h1 {
 }
 
 .card {
+  position: relative;
   display: grid;
   gap: 7px;
   margin-bottom: 8px;
-  padding: 9px 10px;
+  padding: 9px 28px 9px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -260,6 +261,23 @@ h1 {
 
 .card.dragging {
   opacity: 0.5;
+}
+
+.comment-alert {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid #ffc66d;
+  border-radius: 50%;
+  background: var(--warning);
+  cursor: pointer;
+}
+
+.comment-alert:hover {
+  border-color: #ffe1a6;
 }
 
 .card-top {

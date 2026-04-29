@@ -18,4 +18,10 @@ public sealed class IssueState
     public DateTimeOffset LastSeenAt { get; set; }
     public DateTimeOffset? MissingSince { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
+    public bool CommentBaselineEstablished { get; set; }
+    public bool HasUnreadComment { get; set; }
+    public string LastRelevantCommentId { get; set; } = string.Empty;
+    public string LastReadCommentId { get; set; } = string.Empty;
+    public string LastRelevantCommentAuthor { get; set; } = string.Empty;
+    public DateTimeOffset? LastRelevantCommentAt { get; set; }
 }

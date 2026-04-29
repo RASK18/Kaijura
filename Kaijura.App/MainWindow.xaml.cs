@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly ISecretProtector _secretProtector = new DpapiSecretProtector();
     private readonly JiraClient _jiraClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
     private readonly BoardSyncService _syncService = new();
+    private readonly CommentSyncService _commentSyncService = new();
     private readonly UpdateService _updateService = new();
     private readonly DispatcherTimer _refreshTimer = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -129,6 +130,9 @@ public partial class MainWindow : Window
                 case "archiveIssue":
                     await ArchiveIssueAsync(payload);
                     break;
+                case "markCommentRead":
+                    await MarkCommentReadAsync(payload);
+                    break;
                 case "restoreIssue":
                     await RestoreIssueAsync(payload);
                     break;
@@ -177,6 +181,7 @@ public partial class MainWindow : Window
         _state.Config.Jql = string.IsNullOrWhiteSpace(settings.Jql) ? "ORDER BY updated DESC" : settings.Jql.Trim();
         _state.Config.TaskIssueTypes = CleanList(settings.TaskIssueTypes ?? []);
         _state.Config.IncidentIssueTypes = CleanList(settings.IncidentIssueTypes ?? []);
+        _state.Config.IgnoredCommentAuthors = CleanList(settings.IgnoredCommentAuthors ?? []);
         _state.Config.RefreshMinutes = Math.Clamp(settings.RefreshMinutes, 1, 120);
         _state.Config.MaxIssues = Math.Clamp(settings.MaxIssues, 1, 5000);
         _state.Config.UpdateRepositoryUrl = settings.UpdateRepositoryUrl.Trim();
@@ -232,10 +237,15 @@ public partial class MainWindow : Window
             await _jiraClient.ValidateAsync(_state.Config, token, _shutdown.Token);
             var result = await _jiraClient.SearchAsync(_state.Config, token, _shutdown.Token);
             var summary = _syncService.Sync(_state, result, DateTimeOffset.Now);
+            var commentSummary = await _commentSyncService.SyncKanbanCommentsAsync(
+                _state,
+                _jiraClient,
+                token,
+                _shutdown.Token);
 
             _state.LastSuccessfulSyncAt = DateTimeOffset.Now;
             _connection.Status = "connected";
-            _connection.Message = BuildSyncMessage(summary);
+            _connection.Message = BuildSyncMessage(summary, commentSummary);
             _connection.IsConfigured = true;
             _activeView = "board";
             ConfigureRefreshTimer();
@@ -276,6 +286,17 @@ public partial class MainWindow : Window
     {
         var issueId = payload.GetProperty("issueId").GetString() ?? string.Empty;
         if (_syncService.ArchiveIssue(_state, issueId, DateTimeOffset.Now))
+        {
+            await _store.SaveAsync(_state, _shutdown.Token);
+        }
+
+        SendState();
+    }
+
+    private async Task MarkCommentReadAsync(JsonElement payload)
+    {
+        var issueId = payload.GetProperty("issueId").GetString() ?? string.Empty;
+        if (_commentSyncService.MarkCommentRead(_state, issueId))
         {
             await _store.SaveAsync(_state, _shutdown.Token);
         }
@@ -391,6 +412,7 @@ public partial class MainWindow : Window
                 _state.Config.Jql,
                 _state.Config.TaskIssueTypes,
                 _state.Config.IncidentIssueTypes,
+                _state.Config.IgnoredCommentAuthors,
                 _state.Config.RefreshMinutes,
                 _state.Config.MaxIssues,
                 _state.Config.UpdateRepositoryUrl,
@@ -414,12 +436,15 @@ public partial class MainWindow : Window
                     issue.IsMissing,
                     issue.MissingSince,
                     issue.ArchivedAt,
+                    issue.HasUnreadComment,
+                    issue.LastRelevantCommentAuthor,
+                    issue.LastRelevantCommentAt,
                     issue.BrowseUrl
                 })
         };
     }
 
-    private static string BuildSyncMessage(SyncSummary summary)
+    private static string BuildSyncMessage(SyncSummary summary, CommentSyncSummary commentSummary)
     {
         var message = $"{summary.VisibleCount} visibles, {summary.MissingCount} ocultos por JQL.";
 
@@ -431,6 +456,11 @@ public partial class MainWindow : Window
         if (summary.Truncated)
         {
             message += " JQL truncada por límite configurado.";
+        }
+
+        if (commentSummary.FailedCount > 0)
+        {
+            message += $" {commentSummary.FailedCount} tickets sin comprobar comentarios.";
         }
 
         return message;
@@ -523,6 +553,7 @@ public partial class MainWindow : Window
         string Jql,
         List<string> TaskIssueTypes,
         List<string> IncidentIssueTypes,
+        List<string> IgnoredCommentAuthors,
         int RefreshMinutes,
         int MaxIssues,
         string UpdateRepositoryUrl);

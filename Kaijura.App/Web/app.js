@@ -91,6 +91,7 @@ function renderSettings() {
   setValue("jql", config.jql || "");
   setValue("taskIssueTypes", (config.taskIssueTypes || []).join(", "));
   setValue("incidentIssueTypes", (config.incidentIssueTypes || []).join(", "));
+  setValue("ignoredCommentAuthors", (config.ignoredCommentAuthors || []).join(", "));
   setValue("refreshMinutes", config.refreshMinutes || 5);
   setValue("maxIssues", config.maxIssues || 1000);
   setValue("updateRepositoryUrl", config.updateRepositoryUrl || "");
@@ -180,6 +181,19 @@ function createCard(issue, draggable, action) {
     </div>
     <div class="issue-title">${escapeHtml(issue.summary || "")}</div>
   `;
+
+  if (issue.hasUnreadComment) {
+    const unreadButton = document.createElement("button");
+    unreadButton.className = "comment-alert";
+    unreadButton.type = "button";
+    unreadButton.title = unreadTitle(issue);
+    unreadButton.setAttribute("aria-label", "Marcar comentario como leido");
+    unreadButton.addEventListener("click", event => {
+      event.stopPropagation();
+      post("markCommentRead", { issueId: issue.id });
+    });
+    card.appendChild(unreadButton);
+  }
 
   card.querySelector(".issue-key").addEventListener("click", event => {
     event.stopPropagation();
@@ -295,6 +309,7 @@ function saveSettings() {
     jql: value("jql"),
     taskIssueTypes: splitList(value("taskIssueTypes")),
     incidentIssueTypes: splitList(value("incidentIssueTypes")),
+    ignoredCommentAuthors: splitList(value("ignoredCommentAuthors")),
     refreshMinutes: Number(value("refreshMinutes")) || 5,
     maxIssues: Number(value("maxIssues")) || 1000,
     updateRepositoryUrl: value("updateRepositoryUrl")
@@ -338,6 +353,12 @@ function updateText(update) {
   const version = update.version ? ` ${update.version}` : "";
   const progress = update.status === "downloading" ? ` ${update.progress || 0}%` : "";
   return `${update.message || ""}${version}${progress}`;
+}
+
+function unreadTitle(issue) {
+  const author = issue.lastRelevantCommentAuthor ? ` de ${issue.lastRelevantCommentAuthor}` : "";
+  const date = issue.lastRelevantCommentAt ? ` (${formatDate(issue.lastRelevantCommentAt)})` : "";
+  return `Comentario sin leer${author}${date}. Marcar como leido`;
 }
 
 function formatDate(value) {
