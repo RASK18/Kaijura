@@ -139,20 +139,25 @@ function renderLane(kind, host) {
 }
 
 function renderArchive() {
-  renderList(
-    document.getElementById("archiveList"),
-    state.issues.filter(issue => issue.section === "archived"),
-    false,
-    "restore"
-  );
+  const archived = state.issues.filter(issue => issue.section === "archived");
+  const unmapped = archived.filter(issue => issue.kind === "unmapped");
+  const unmappedBlock = document.getElementById("archiveUnmappedBlock");
+
+  renderList(document.getElementById("taskArchiveList"), archived.filter(issue => issue.kind === "task"), false, "restore");
+  renderList(document.getElementById("incidentArchiveList"), archived.filter(issue => issue.kind === "incident"), false, "restore");
+  unmappedBlock.classList.toggle("hidden", unmapped.length === 0);
+  renderList(document.getElementById("archiveUnmappedList"), unmapped, false, "restore");
 }
 
 function renderMissing() {
-  renderList(
-    document.getElementById("missingList"),
-    state.issues.filter(issue => issue.section === "missing" || issue.isMissing),
-    false
-  );
+  const missing = state.issues.filter(issue => issue.section === "missing" || issue.isMissing);
+  const unmapped = missing.filter(issue => issue.kind === "unmapped");
+  const unmappedBlock = document.getElementById("missingUnmappedBlock");
+
+  renderList(document.getElementById("taskMissingList"), missing.filter(issue => issue.kind === "task"), false);
+  renderList(document.getElementById("incidentMissingList"), missing.filter(issue => issue.kind === "incident"), false);
+  unmappedBlock.classList.toggle("hidden", unmapped.length === 0);
+  renderList(document.getElementById("missingUnmappedList"), unmapped, false);
 }
 
 function renderList(host, issues, draggable, action) {

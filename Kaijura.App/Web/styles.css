@@ -381,15 +381,18 @@ button {
   border-top: 1px solid var(--border-soft);
 }
 
-.backlog-grid {
+.backlog-grid,
+.archive-grid,
+.missing-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 14px;
 }
 
 .backlog-grid > div,
-.unmapped-block,
-.archive-list {
+.archive-grid > div,
+.missing-grid > div,
+.unmapped-block {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: #151518;
@@ -407,14 +410,14 @@ button {
   margin-top: 14px;
 }
 
-.plain-list,
-.archive-list {
+.plain-list {
   display: grid;
   gap: 8px;
   padding: 8px;
 }
 
-.archive-list {
+.archive-grid .plain-list,
+.missing-grid .plain-list {
   align-content: start;
   min-height: 160px;
 }

@@ -51,12 +51,38 @@
 
       <section id="archiveView" class="view hidden">
         <div class="section-title">Tickets archivados</div>
-        <div id="archiveList" class="archive-list"></div>
+        <div class="archive-grid">
+          <div>
+            <div class="list-title">Tareas</div>
+            <div id="taskArchiveList" class="plain-list"></div>
+          </div>
+          <div>
+            <div class="list-title">Incidencias</div>
+            <div id="incidentArchiveList" class="plain-list"></div>
+          </div>
+        </div>
+        <div id="archiveUnmappedBlock" class="unmapped-block hidden">
+          <div class="list-title">Sin mapear</div>
+          <div id="archiveUnmappedList" class="plain-list"></div>
+        </div>
       </section>
 
       <section id="missingView" class="view hidden">
         <div class="section-title">Tickets perdidos que ya no devuelve JQL</div>
-        <div id="missingList" class="archive-list"></div>
+        <div class="missing-grid">
+          <div>
+            <div class="list-title">Tareas</div>
+            <div id="taskMissingList" class="plain-list"></div>
+          </div>
+          <div>
+            <div class="list-title">Incidencias</div>
+            <div id="incidentMissingList" class="plain-list"></div>
+          </div>
+        </div>
+        <div id="missingUnmappedBlock" class="unmapped-block hidden">
+          <div class="list-title">Sin mapear</div>
+          <div id="missingUnmappedList" class="plain-list"></div>
+        </div>
       </section>
 
       <section id="settingsView" class="view hidden">
