@@ -105,6 +105,81 @@ button {
   color: #f3d29d;
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(460px, 100%);
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #18181c;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.confirm-message,
+.confirm-error {
+  line-height: 1.45;
+}
+
+.confirm-message {
+  color: var(--text);
+}
+
+.confirm-error {
+  color: #ffb0ba;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.confirm-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.confirm-button.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #071b17;
+  font-weight: 700;
+}
+
+.confirm-button.secondary {
+  background: #202027;
+  color: var(--muted);
+}
+
+.confirm-button:hover {
+  border-color: #43434a;
+}
+
+.confirm-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
 .view {
   padding-top: 8px;
 }
@@ -257,6 +332,7 @@ button {
 
 .issue-status:focus-visible,
 .tracker-button:focus-visible,
+.confirm-button:focus-visible,
 .status-option:focus-visible,
 .status-form-submit:focus-visible,
 .status-form-cancel:focus-visible {
@@ -314,7 +390,7 @@ button {
 .tracker-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 8px;
   min-height: 26px;
   color: var(--primary);

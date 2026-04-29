@@ -23,6 +23,14 @@ const trackerUi = {
   errorByIssueId: {}
 };
 
+const confirmDialog = {
+  isOpen: false,
+  isBusy: false,
+  onAccept: null,
+  onCancel: null,
+  previousFocus: null
+};
+
 const views = {
   board: document.getElementById("boardView"),
   archive: document.getElementById("archiveView"),
@@ -55,6 +63,21 @@ window.chrome.webview.addEventListener("message", event => {
     case "trackerResult":
       receiveTrackerResult(event.data.payload);
       break;
+    case "showCloseTrackerConfirmation":
+      showCloseTrackerConfirmation(event.data.payload);
+      break;
+    case "closeTrackerError":
+      receiveCloseTrackerError(event.data.payload);
+      break;
+    case "showPendingTrackerConfirmation":
+      showPendingTrackerConfirmation(event.data.payload);
+      break;
+    case "pendingTrackerError":
+      receivePendingTrackerError(event.data.payload);
+      break;
+    case "pendingTrackerResult":
+      closeConfirmDialog();
+      break;
   }
 });
 
@@ -66,6 +89,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function bindChrome() {
   document.getElementById("installUpdateButton").addEventListener("click", () => post("installUpdate"));
+  document.getElementById("confirmAcceptButton").addEventListener("click", acceptConfirmDialog);
+  document.getElementById("confirmCancelButton").addEventListener("click", cancelConfirmDialog);
+  document.getElementById("confirmOverlay").addEventListener("click", event => {
+    if (event.target === event.currentTarget) {
+      cancelConfirmDialog();
+    }
+  });
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
     saveSettings();
@@ -73,6 +103,11 @@ function bindChrome() {
   document.addEventListener("click", closeTransitionMenu);
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
+      if (confirmDialog.isOpen) {
+        cancelConfirmDialog();
+        return;
+      }
+
       closeTransitionMenu();
     }
   });
@@ -340,20 +375,28 @@ function toggleTracker(issue) {
   const hasOtherTracker = state.activeTracker && state.activeTracker.issueId !== issue.id;
   if (hasOtherTracker) {
     const activeKey = state.activeTracker.issueKey || "otro ticket";
-    const accepted = window.confirm(
-      `Hay un tracker iniciado en ${activeKey}. Se parara y se registrara en Jira antes de iniciar ${issue.key}.`
-    );
-
-    if (!accepted) {
-      return;
-    }
+    showConfirmDialog({
+      title: "Tracker activo",
+      message: `Hay un tracker iniciado en ${activeKey}. Se parara y se registrara en Jira antes de iniciar ${issue.key}.`,
+      acceptLabel: "Aceptar",
+      cancelLabel: "Cancelar",
+      onAccept: () => {
+        closeConfirmDialog();
+        startTracker(issue, true);
+      }
+    });
+    return;
   }
 
+  startTracker(issue, false);
+}
+
+function startTracker(issue, replaceActive) {
   trackerUi.busyIssueId = issue.id;
   render();
   post("startTracker", {
     issueId: issue.id,
-    replaceActive: !!hasOtherTracker
+    replaceActive
   });
 }
 
@@ -685,6 +728,106 @@ function receiveTrackerResult(payload) {
 
   trackerUi.busyIssueId = null;
   render();
+}
+
+function showCloseTrackerConfirmation(payload) {
+  const issueKey = payload?.issueKey || "el ticket activo";
+  showConfirmDialog({
+    title: "Tracker activo",
+    message: `Hay un tracker iniciado en ${issueKey}. Antes de cerrar se parara y se registrara en Jira.`,
+    acceptLabel: "Aceptar",
+    cancelLabel: "Cancelar",
+    onAccept: () => {
+      setConfirmBusy(true);
+      post("confirmCloseWithTracker");
+    },
+    onCancel: () => post("cancelCloseWithTracker")
+  });
+}
+
+function receiveCloseTrackerError(payload) {
+  showConfirmError(payload?.message || "No se pudo registrar el tiempo en Jira.");
+}
+
+function showPendingTrackerConfirmation(payload) {
+  const issueKey = payload?.issueKey || "el ticket pendiente";
+  showConfirmDialog({
+    title: "Tracker pendiente",
+    message: `Hay un tracker pendiente en ${issueKey}. Puedes registrarlo ahora en Jira o descartarlo.`,
+    acceptLabel: "Registrar",
+    cancelLabel: "Descartar",
+    onAccept: () => {
+      setConfirmBusy(true);
+      post("registerPendingTracker");
+    },
+    onCancel: () => post("discardPendingTracker")
+  });
+}
+
+function receivePendingTrackerError(payload) {
+  showConfirmError(payload?.message || "No se pudo registrar el tracker pendiente.");
+}
+
+function showConfirmDialog(options) {
+  confirmDialog.previousFocus = document.activeElement;
+  confirmDialog.isOpen = true;
+  confirmDialog.onAccept = options.onAccept || null;
+  confirmDialog.onCancel = options.onCancel || null;
+
+  document.getElementById("confirmTitle").textContent = options.title || "Confirmar";
+  document.getElementById("confirmMessage").textContent = options.message || "";
+  document.getElementById("confirmAcceptButton").textContent = options.acceptLabel || "Aceptar";
+  document.getElementById("confirmCancelButton").textContent = options.cancelLabel || "Cancelar";
+  document.getElementById("confirmError").classList.add("hidden");
+  document.getElementById("confirmError").textContent = "";
+  document.getElementById("confirmOverlay").classList.remove("hidden");
+  setConfirmBusy(false);
+  document.getElementById("confirmAcceptButton").focus();
+}
+
+function acceptConfirmDialog() {
+  if (confirmDialog.isBusy) {
+    return;
+  }
+
+  confirmDialog.onAccept?.();
+}
+
+function cancelConfirmDialog() {
+  if (!confirmDialog.isOpen || confirmDialog.isBusy) {
+    return;
+  }
+
+  const onCancel = confirmDialog.onCancel;
+  closeConfirmDialog();
+  onCancel?.();
+}
+
+function closeConfirmDialog() {
+  document.getElementById("confirmOverlay").classList.add("hidden");
+  setConfirmBusy(false);
+  confirmDialog.isOpen = false;
+  confirmDialog.onAccept = null;
+  confirmDialog.onCancel = null;
+
+  if (confirmDialog.previousFocus && typeof confirmDialog.previousFocus.focus === "function") {
+    confirmDialog.previousFocus.focus();
+  }
+
+  confirmDialog.previousFocus = null;
+}
+
+function setConfirmBusy(isBusy) {
+  confirmDialog.isBusy = isBusy;
+  document.getElementById("confirmAcceptButton").disabled = isBusy;
+  document.getElementById("confirmCancelButton").disabled = isBusy;
+}
+
+function showConfirmError(message) {
+  const error = document.getElementById("confirmError");
+  error.textContent = message;
+  error.classList.remove("hidden");
+  setConfirmBusy(false);
 }
 
 function bindDropList(list) {

@@ -50,6 +50,7 @@ public partial class MainWindow : Window
     private string _activeView = "settings";
     private bool _webReady;
     private bool _initialRefreshStarted;
+    private bool _startupTrackerPromptShown;
     private bool _allowCloseAfterTrackerStop;
     private bool _closingTrackerInProgress;
 
@@ -73,7 +74,7 @@ public partial class MainWindow : Window
         UpdateTitlebarStatus();
     }
 
-    private async void OnClosing(object? sender, CancelEventArgs e)
+    private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_allowCloseAfterTrackerStop || _state.ActiveTimeTracker is null)
         {
@@ -87,39 +88,13 @@ public partial class MainWindow : Window
         }
 
         var tracker = _state.ActiveTimeTracker;
-        var result = MessageBox.Show(
-            this,
-            $"Hay un tracker iniciado en {tracker.IssueKey}. Antes de cerrar se parara y se registrara en Jira.",
-            "Kaijura",
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning);
-
-        if (result != MessageBoxResult.OK)
-        {
-            return;
-        }
-
         _closingTrackerInProgress = true;
-        try
+
+        SendWebMessage("showCloseTrackerConfirmation", new
         {
-            await StopActiveTrackerWithLockAsync(null, DateTimeOffset.Now, saveState: true);
-            _allowCloseAfterTrackerStop = true;
-            Close();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            MessageBox.Show(
-                this,
-                $"No se pudo registrar el tiempo en Jira. La aplicacion seguira abierta.\n\n{FriendlyJiraError(ex)}",
-                "Kaijura",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            SendState();
-        }
-        finally
-        {
-            _closingTrackerInProgress = false;
-        }
+            issueId = tracker.IssueId,
+            issueKey = tracker.IssueKey
+        });
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
@@ -241,7 +216,6 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         _state = await _store.LoadAsync(_shutdown.Token);
         _connection = CreateInitialConnection();
-        await ResolvePendingTrackerOnStartupAsync();
         ConfigureRefreshTimer();
         UpdateTitlebarStatus();
 
@@ -307,6 +281,7 @@ public partial class MainWindow : Window
                 case "ready":
                     _webReady = true;
                     SendState();
+                    ShowPendingTrackerPromptIfNeeded();
                     await StartInitialRefreshAsync();
                     break;
                 case "saveSettings":
@@ -323,6 +298,18 @@ public partial class MainWindow : Window
                     break;
                 case "stopTracker":
                     await StopTrackerAsync(payload);
+                    break;
+                case "confirmCloseWithTracker":
+                    await ConfirmCloseWithTrackerAsync();
+                    break;
+                case "cancelCloseWithTracker":
+                    CancelCloseWithTracker();
+                    break;
+                case "registerPendingTracker":
+                    await RegisterPendingTrackerAsync();
+                    break;
+                case "discardPendingTracker":
+                    await DiscardPendingTrackerAsync();
                     break;
                 case "archiveIssue":
                     await ArchiveIssueAsync(payload);
@@ -594,41 +581,70 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task ResolvePendingTrackerOnStartupAsync()
+    private async Task ConfirmCloseWithTrackerAsync()
     {
-        var tracker = _state.ActiveTimeTracker;
-        if (tracker is null)
-        {
-            return;
-        }
-
-        var result = MessageBox.Show(
-            this,
-            $"Hay un tracker pendiente en {tracker.IssueKey}. Puedes registrarlo ahora en Jira o descartarlo.",
-            "Kaijura",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-
-        if (result != MessageBoxResult.Yes)
-        {
-            _timeTrackingService.Discard(_state);
-            await _store.SaveAsync(_state, _shutdown.Token);
-            return;
-        }
-
         try
         {
-            await StopActiveTrackerCoreAsync(null, DateTimeOffset.Now, saveState: true, _shutdown.Token);
+            await StopActiveTrackerWithLockAsync(null, DateTimeOffset.Now, saveState: true);
+            _allowCloseAfterTrackerStop = true;
+            Close();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            MessageBox.Show(
-                this,
-                $"No se pudo registrar el tracker pendiente. Seguira activo para reintentar.\n\n{FriendlyJiraError(ex)}",
-                "Kaijura",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _closingTrackerInProgress = false;
+            SendWebMessage("closeTrackerError", new
+            {
+                message = $"No se pudo registrar el tiempo en Jira. La aplicacion seguira abierta. {FriendlyJiraError(ex)}"
+            });
+            SendState();
         }
+    }
+
+    private void CancelCloseWithTracker()
+    {
+        _closingTrackerInProgress = false;
+    }
+
+    private void ShowPendingTrackerPromptIfNeeded()
+    {
+        var tracker = _state.ActiveTimeTracker;
+        if (_startupTrackerPromptShown || tracker is null)
+        {
+            return;
+        }
+
+        _startupTrackerPromptShown = true;
+        SendWebMessage("showPendingTrackerConfirmation", new
+        {
+            issueId = tracker.IssueId,
+            issueKey = tracker.IssueKey
+        });
+    }
+
+    private async Task RegisterPendingTrackerAsync()
+    {
+        try
+        {
+            await StopActiveTrackerWithLockAsync(null, DateTimeOffset.Now, saveState: true);
+            SendWebMessage("pendingTrackerResult", new { });
+            SendState();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SendWebMessage("pendingTrackerError", new
+            {
+                message = $"No se pudo registrar el tracker pendiente. Seguira activo para reintentar. {FriendlyJiraError(ex)}"
+            });
+            SendState();
+        }
+    }
+
+    private async Task DiscardPendingTrackerAsync()
+    {
+        _timeTrackingService.Discard(_state);
+        await _store.SaveAsync(_state, _shutdown.Token);
+        SendWebMessage("pendingTrackerResult", new { });
+        SendState();
     }
 
     private bool ShouldStopActiveTrackerForMove(string issueId, BoardSection targetSection, BoardColumn targetColumn)

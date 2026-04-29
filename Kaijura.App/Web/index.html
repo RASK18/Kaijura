@@ -154,6 +154,18 @@
         </form>
       </section>
     </main>
+
+    <div id="confirmOverlay" class="confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="confirm-dialog">
+        <div id="confirmTitle" class="confirm-title">Tracker activo</div>
+        <div id="confirmMessage" class="confirm-message"></div>
+        <div id="confirmError" class="confirm-error hidden"></div>
+        <div class="confirm-actions">
+          <button id="confirmCancelButton" class="confirm-button secondary" type="button">Cancelar</button>
+          <button id="confirmAcceptButton" class="confirm-button primary" type="button">Aceptar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="./app.js"></script>
