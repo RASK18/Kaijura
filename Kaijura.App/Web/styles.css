@@ -221,6 +221,8 @@ button {
 }
 
 .column {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 174px;
   border: 1px solid var(--border-soft);
@@ -229,6 +231,7 @@ button {
 }
 
 .column-title {
+  flex: 0 0 auto;
   height: 36px;
   padding: 9px 10px;
   border-bottom: 1px solid var(--border-soft);
@@ -242,6 +245,7 @@ button {
 }
 
 .column .drop-list {
+  flex: 1 1 auto;
   min-height: 136px;
 }
 
@@ -604,15 +608,16 @@ button {
 
 .backlog-grid,
 .archive-grid,
-.missing-grid,
-.unmapped-grid {
+.missing-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 14px;
 }
 
 .unmapped-grid {
-  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
 }
 
 .backlog-grid > div,
@@ -647,6 +652,14 @@ button {
 .unmapped-grid .plain-list {
   align-content: start;
   min-height: 160px;
+}
+
+.unmapped-grid .plain-list {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.unmapped-grid .empty {
+  grid-column: 1 / -1;
 }
 
 .settings-form {

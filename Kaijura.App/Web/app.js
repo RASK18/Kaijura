@@ -31,6 +31,15 @@ const confirmDialog = {
   previousFocus: null
 };
 
+const dragAutoScroll = {
+  active: false,
+  velocity: 0,
+  frameId: null
+};
+
+const dragAutoScrollEdgeSize = 150;
+const dragAutoScrollMaxSpeed = 24;
+
 const views = {
   board: document.getElementById("boardView"),
   archive: document.getElementById("archiveView"),
@@ -101,6 +110,9 @@ function bindChrome() {
     event.preventDefault();
     saveSettings();
   });
+  document.addEventListener("dragover", updateDragAutoScroll, true);
+  document.addEventListener("drop", stopDragAutoScroll, true);
+  document.addEventListener("dragend", stopDragAutoScroll, true);
   document.addEventListener("click", closeTransitionMenu);
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
@@ -208,18 +220,14 @@ function renderMissing() {
 }
 
 function renderUnmapped() {
-  const unmapped = state.issues.filter(issue => issue.kind === "unmapped");
-  const missing = unmapped.filter(issue => issue.section === "missing" || issue.isMissing);
-  const archived = unmapped.filter(issue => !issue.isMissing && issue.section === "archived");
-  const active = unmapped.filter(issue => !issue.isMissing && issue.section !== "archived" && issue.section !== "missing");
+  const active = state.issues.filter(issue =>
+    issue.kind === "unmapped"
+    && !issue.isMissing
+    && issue.section !== "archived"
+    && issue.section !== "missing");
 
   setCount("activeUnmappedCount", active.length);
-  setCount("archivedUnmappedCount", archived.length);
-  setCount("missingUnmappedCount", missing.length);
-
   renderList(document.getElementById("activeUnmappedList"), active, false);
-  renderList(document.getElementById("archivedUnmappedList"), archived, false, "restore");
-  renderList(document.getElementById("unmappedMissingList"), missing, false);
 }
 
 function renderList(host, issues, draggable, action) {
@@ -314,8 +322,12 @@ function createCard(issue, draggable, action) {
       card.classList.add("dragging");
       event.dataTransfer.setData("text/plain", issue.id);
       event.dataTransfer.effectAllowed = "move";
+      startDragAutoScroll(event);
     });
-    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      stopDragAutoScroll();
+    });
   }
 
   if (issue.section === "board" && issue.column === "ValidatedQa") {
@@ -844,6 +856,70 @@ function showConfirmError(message) {
   error.textContent = message;
   error.classList.remove("hidden");
   setConfirmBusy(false);
+}
+
+function startDragAutoScroll(event) {
+  dragAutoScroll.active = true;
+  updateDragAutoScroll(event);
+
+  if (dragAutoScroll.frameId === null) {
+    dragAutoScroll.frameId = requestAnimationFrame(runDragAutoScroll);
+  }
+}
+
+function stopDragAutoScroll() {
+  dragAutoScroll.active = false;
+  dragAutoScroll.velocity = 0;
+
+  if (dragAutoScroll.frameId !== null) {
+    cancelAnimationFrame(dragAutoScroll.frameId);
+    dragAutoScroll.frameId = null;
+  }
+}
+
+function updateDragAutoScroll(event) {
+  if (!dragAutoScroll.active) {
+    return;
+  }
+
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const y = event.clientY;
+
+  if (!Number.isFinite(y) || viewportHeight <= 0) {
+    dragAutoScroll.velocity = 0;
+    return;
+  }
+
+  if (y < dragAutoScrollEdgeSize) {
+    dragAutoScroll.velocity = -dragAutoScrollSpeed(dragAutoScrollEdgeSize - y);
+    return;
+  }
+
+  const bottomDistance = viewportHeight - y;
+  if (bottomDistance < dragAutoScrollEdgeSize) {
+    dragAutoScroll.velocity = dragAutoScrollSpeed(dragAutoScrollEdgeSize - bottomDistance);
+    return;
+  }
+
+  dragAutoScroll.velocity = 0;
+}
+
+function dragAutoScrollSpeed(edgeOverlap) {
+  const ratio = Math.min(1, Math.max(0, edgeOverlap / dragAutoScrollEdgeSize));
+  return Math.max(2, Math.round(ratio * dragAutoScrollMaxSpeed));
+}
+
+function runDragAutoScroll() {
+  if (!dragAutoScroll.active) {
+    dragAutoScroll.frameId = null;
+    return;
+  }
+
+  if (dragAutoScroll.velocity !== 0) {
+    window.scrollBy(0, dragAutoScroll.velocity);
+  }
+
+  dragAutoScroll.frameId = requestAnimationFrame(runDragAutoScroll);
 }
 
 function bindDropList(list) {
