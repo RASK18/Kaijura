@@ -149,7 +149,7 @@ public sealed class CommentSyncServiceTests
             IssueType = "Task",
             Kind = IssueKind.Task,
             Section = BoardSection.Board,
-            Column = BoardColumn.Dev
+            Column = BoardColumn.PendingQa
         };
 
         state.Issues.Add(issue);

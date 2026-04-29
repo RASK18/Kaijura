@@ -127,7 +127,7 @@ button {
 
 .kanban-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(178px, 1fr));
+  grid-template-columns: repeat(4, minmax(210px, 1fr));
   gap: 10px;
 }
 
@@ -561,6 +561,6 @@ select:focus {
 
 @media (max-width: 1180px) {
   .kanban-grid {
-    grid-template-columns: repeat(5, minmax(160px, 1fr));
+    grid-template-columns: repeat(4, minmax(190px, 1fr));
   }
 }

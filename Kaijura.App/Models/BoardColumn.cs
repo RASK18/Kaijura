@@ -4,7 +4,6 @@ public enum BoardColumn
 {
     ToDo,
     Progress,
-    Dev,
-    Test,
-    Ready
+    PendingQa,
+    ValidatedQa
 }

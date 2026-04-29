@@ -536,7 +536,7 @@ public partial class MainWindow : Window
                 ?? throw new InvalidOperationException("No se encontro el ticket en Kaijura.");
             if (issue.Section != BoardSection.Board || issue.Column != BoardColumn.Progress || issue.IsMissing)
             {
-                throw new InvalidOperationException("El tracker solo puede iniciarse en tickets de Progress.");
+                throw new InvalidOperationException("El tracker solo puede iniciarse en tickets de En progreso.");
             }
 
             if (_state.ActiveTimeTracker is not null)
@@ -1126,11 +1126,10 @@ public partial class MainWindow : Window
     {
         return column switch
         {
-            BoardColumn.ToDo => "ToDo",
-            BoardColumn.Progress => "Progress",
-            BoardColumn.Dev => "Dev",
-            BoardColumn.Test => "Test",
-            BoardColumn.Ready => "Ready",
+            BoardColumn.ToDo => "Por hacer",
+            BoardColumn.Progress => "En progreso",
+            BoardColumn.PendingQa => "Pendiente QA",
+            BoardColumn.ValidatedQa => "Validado QA",
             _ => column.ToString()
         };
     }

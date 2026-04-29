@@ -83,9 +83,9 @@ public sealed class TimeTrackingServiceTests
         var service = new TimeTrackingService();
 
         Assert.False(service.ShouldStopForMove(state, "10001", BoardSection.Board, BoardColumn.Progress));
-        Assert.True(service.ShouldStopForMove(state, "10001", BoardSection.Board, BoardColumn.Dev));
+        Assert.True(service.ShouldStopForMove(state, "10001", BoardSection.Board, BoardColumn.PendingQa));
         Assert.True(service.ShouldStopForMove(state, "10001", BoardSection.Backlog, BoardColumn.ToDo));
-        Assert.False(service.ShouldStopForMove(state, "10002", BoardSection.Board, BoardColumn.Dev));
+        Assert.False(service.ShouldStopForMove(state, "10002", BoardSection.Board, BoardColumn.PendingQa));
     }
 
     private static AppState StateWithActiveTracker()

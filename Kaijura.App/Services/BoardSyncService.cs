@@ -86,7 +86,7 @@ public sealed class BoardSyncService
     public bool ArchiveIssue(AppState state, string jiraId, DateTimeOffset now)
     {
         var issue = FindIssue(state, jiraId);
-        if (issue is null || issue.Section != BoardSection.Board || issue.Column != BoardColumn.Ready)
+        if (issue is null || issue.Section != BoardSection.Board || issue.Column != BoardColumn.ValidatedQa)
         {
             return false;
         }

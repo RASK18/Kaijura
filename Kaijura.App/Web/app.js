@@ -265,7 +265,7 @@ function createCard(issue, draggable, action) {
     card.addEventListener("dragend", () => card.classList.remove("dragging"));
   }
 
-  if (issue.section === "board" && issue.column === "Ready") {
+  if (issue.section === "board" && issue.column === "ValidatedQa") {
     const actions = document.createElement("div");
     actions.className = "card-actions";
     const button = document.createElement("button");

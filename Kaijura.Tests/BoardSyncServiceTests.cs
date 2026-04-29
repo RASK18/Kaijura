@@ -27,7 +27,7 @@ public sealed class BoardSyncServiceTests
         var issue = Issue("10001", "BTR-1802", "Task");
 
         service.Sync(state, Search(issue), DateTimeOffset.Parse("2026-04-28T10:00:00Z"));
-        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.Dev, ["10001"]);
+        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.PendingQa, ["10001"]);
 
         service.Sync(state, Search(), DateTimeOffset.Parse("2026-04-28T10:05:00Z"));
 
@@ -38,22 +38,22 @@ public sealed class BoardSyncServiceTests
         service.Sync(state, Search(issue), DateTimeOffset.Parse("2026-04-28T10:10:00Z"));
 
         Assert.Equal(BoardSection.Board, state.Issues[0].Section);
-        Assert.Equal(BoardColumn.Dev, state.Issues[0].Column);
+        Assert.Equal(BoardColumn.PendingQa, state.Issues[0].Column);
         Assert.False(state.Issues[0].IsMissing);
     }
 
     [Fact]
-    public void ArchiveRequiresReadyColumn()
+    public void ArchiveRequiresValidatedQaColumn()
     {
         var state = CreateState();
         var service = new BoardSyncService();
 
         service.Sync(state, Search(Issue("10001", "BTR-1802", "Task")), DateTimeOffset.Parse("2026-04-28T10:00:00Z"));
-        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.Dev, ["10001"]);
+        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.PendingQa, ["10001"]);
 
         Assert.False(service.ArchiveIssue(state, "10001", DateTimeOffset.Parse("2026-04-28T10:05:00Z")));
 
-        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.Ready, ["10001"]);
+        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.ValidatedQa, ["10001"]);
 
         Assert.True(service.ArchiveIssue(state, "10001", DateTimeOffset.Parse("2026-04-28T10:06:00Z")));
         Assert.Equal(BoardSection.Archived, state.Issues[0].Section);
@@ -77,7 +77,7 @@ public sealed class BoardSyncServiceTests
         var state = CreateState();
         var service = new BoardSyncService();
         service.Sync(state, Search(Issue("10001", "BTR-1802", "Task")), DateTimeOffset.Parse("2026-04-28T10:00:00Z"));
-        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.Dev, ["10001"]);
+        service.MoveIssue(state, "10001", BoardSection.Board, BoardColumn.PendingQa, ["10001"]);
 
         var changed = service.UpdateIssueFromJira(
             state,
@@ -95,7 +95,7 @@ public sealed class BoardSyncServiceTests
         Assert.Equal("Resolved", state.Issues[0].JiraStatus);
         Assert.Equal("Updated summary", state.Issues[0].Summary);
         Assert.Equal(BoardSection.Board, state.Issues[0].Section);
-        Assert.Equal(BoardColumn.Dev, state.Issues[0].Column);
+        Assert.Equal(BoardColumn.PendingQa, state.Issues[0].Column);
     }
 
     private static AppState CreateState()
