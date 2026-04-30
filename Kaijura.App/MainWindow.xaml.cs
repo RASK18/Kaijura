@@ -297,6 +297,9 @@ public partial class MainWindow : Window
                 case "simulateAutomationRules":
                     SimulateAutomationRules(payload);
                     break;
+                case "applyAutomationRules":
+                    await ApplyAutomationRulesAsync(payload);
+                    break;
                 case "refresh":
                     await RefreshJiraAsync(isAutoRefresh: false);
                     break;
@@ -424,6 +427,32 @@ public partial class MainWindow : Window
             total = result.Applications.Count,
             applications = result.Applications.Take(50)
         });
+    }
+
+    private async Task ApplyAutomationRulesAsync(JsonElement payload)
+    {
+        var request = payload.Deserialize<AutomationRulesPayload>(JsonOptions)
+            ?? throw new InvalidOperationException("Reglas vacias.");
+        var rules = CleanAutomationRules(request.AutomationRules ?? []);
+
+        await _refreshLock.WaitAsync(_shutdown.Token);
+        try
+        {
+            _state.Config.AutomationRules = rules;
+            var result = _automationService.ApplyNow(_state, rules, DateTimeOffset.Now);
+            await _store.SaveAsync(_state, _shutdown.Token);
+
+            SendState();
+            SendWebMessage("automationApplyResult", new
+            {
+                total = result.Applications.Count,
+                applications = result.Applications.Take(50)
+            });
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
     }
 
     private async Task RefreshJiraAsync(bool isAutoRefresh)

@@ -25,16 +25,15 @@ public sealed class AutomationRuleService
     public AutomationRuleResult Simulate(AppState state, IReadOnlyList<AutomationRule> rules, DateTimeOffset now)
     {
         var simulationState = CloneStateForSimulation(state, rules);
-        foreach (var issue in simulationState.Issues)
-        {
-            issue.PendingAutomationTriggers.Add(AutomationTrigger.TicketNew);
-            issue.PendingAutomationTriggers.Add(AutomationTrigger.JiraStatusChanged);
-            issue.PendingAutomationTriggers.Add(AutomationTrigger.IssueClassificationChanged);
-            issue.PendingAutomationTriggers.Add(AutomationTrigger.RelevantCommentChanged);
-            issue.PendingAutomationTriggers.Add(AutomationTrigger.TemporalCheck);
-        }
+        AddImmediateTriggers(simulationState);
 
         return ApplyRules(simulationState, simulationState.Config.AutomationRules, issue => issue.PendingAutomationTriggers, now);
+    }
+
+    public AutomationRuleResult ApplyNow(AppState state, IReadOnlyList<AutomationRule> rules, DateTimeOffset now)
+    {
+        AddImmediateTriggers(state);
+        return ApplyRules(state, rules, issue => issue.PendingAutomationTriggers, now);
     }
 
     private static AutomationRuleResult ApplyRules(
@@ -275,6 +274,18 @@ public sealed class AutomationRuleService
         foreach (var issue in state.Issues)
         {
             issue.PendingAutomationTriggers.Clear();
+        }
+    }
+
+    private static void AddImmediateTriggers(AppState state)
+    {
+        foreach (var issue in state.Issues)
+        {
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.TicketNew);
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.JiraStatusChanged);
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.IssueClassificationChanged);
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.RelevantCommentChanged);
+            issue.PendingAutomationTriggers.Add(AutomationTrigger.TemporalCheck);
         }
     }
 

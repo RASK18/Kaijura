@@ -147,7 +147,11 @@ window.chrome.webview.addEventListener("message", event => {
       closeConfirmDialog();
       break;
     case "automationSimulation":
-      automationUi.simulation = event.data.payload || null;
+      automationUi.simulation = { ...(event.data.payload || {}), mode: "simulation" };
+      renderAutomationSimulation();
+      break;
+    case "automationApplyResult":
+      automationUi.simulation = { ...(event.data.payload || {}), mode: "apply" };
       renderAutomationSimulation();
       break;
   }
@@ -167,6 +171,13 @@ function bindChrome() {
   });
   document.getElementById("testAutomationRulesButton").addEventListener("click", () => {
     post("simulateAutomationRules", { automationRules: cleanAutomationRulesForSave(automationUi.rules) });
+  });
+  document.getElementById("applyAutomationRulesButton").addEventListener("click", () => {
+    const automationRules = cleanAutomationRulesForSave(automationUi.rules);
+    automationUi.rules = automationRules;
+    automationUi.isDirty = false;
+    automationUi.sourceSignature = JSON.stringify(automationRules);
+    post("applyAutomationRules", { automationRules });
   });
   document.getElementById("confirmAcceptButton").addEventListener("click", acceptConfirmDialog);
   document.getElementById("confirmCancelButton").addEventListener("click", cancelConfirmDialog);
@@ -318,9 +329,12 @@ function renderAutomationSimulation() {
   }
 
   const total = simulation.total || 0;
+  const applied = simulation.mode === "apply";
   const title = document.createElement("div");
   title.className = "automation-simulation-title";
-  title.textContent = total === 0 ? "La prueba no moveria tickets" : `${total} cambios posibles`;
+  title.textContent = total === 0
+    ? applied ? "No se aplicaron cambios" : "La prueba no moveria tickets"
+    : applied ? `${total} cambios aplicados` : `${total} cambios posibles`;
   host.appendChild(title);
 
   const applications = simulation.applications || [];

@@ -187,6 +187,40 @@ public sealed class AutomationRuleServiceTests
     }
 
     [Fact]
+    public void ApplyNowRunsRulesAgainstCurrentTicketsAndMutatesState()
+    {
+        var state = CreateState();
+        state.Issues.Add(new IssueState
+        {
+            JiraId = "10001",
+            Key = "BTR-1",
+            Summary = "Summary",
+            JiraStatus = "Open",
+            IssueType = "Task",
+            Kind = IssueKind.Task,
+            Section = BoardSection.Backlog,
+            LastVisibleSection = BoardSection.Backlog,
+            Column = BoardColumn.ToDo,
+            FirstSeenAt = DateTimeOffset.Parse("2026-04-28T10:00:00Z"),
+            LastSeenAt = DateTimeOffset.Parse("2026-04-28T10:00:00Z")
+        });
+        var automation = new AutomationRuleService();
+        var rules = new[]
+        {
+            Rule(
+                AutomationTrigger.JiraStatusChanged,
+                AutomationDestination.Progress,
+                [StatusCondition("Open")])
+        };
+
+        var result = automation.ApplyNow(state, rules, DateTimeOffset.Parse("2026-04-28T10:10:00Z"));
+
+        Assert.Single(result.Applications);
+        Assert.Equal(BoardSection.Board, state.Issues[0].Section);
+        Assert.Equal(BoardColumn.Progress, state.Issues[0].Column);
+    }
+
+    [Fact]
     public async Task OldConfigWithoutAutomationRulesLoadsWithEmptyRules()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"kaijura-tests-{Guid.NewGuid():N}");
